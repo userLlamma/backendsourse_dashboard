@@ -8,16 +8,30 @@ const morgan = require('morgan');
 require('dotenv').config();
 
 const app = express();
+// debug
+app.post('/test-direct', (req, res) => {
+  console.log('Direct test endpoint reached');
+  console.log('Headers:', req.headers);
+  res.json({ success: true, message: 'Direct test endpoint working' });
+});
 
-// 安全配置
+// 安全配置 - 为开发环境禁用严格的CSP设置
 app.use(helmet({
-  contentSecurityPolicy: false,  // 启用前端React访问
+  contentSecurityPolicy: false,
+}));
+
+// CORS配置 - 允许所有来源以满足开发需求
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'x-student-id', 'x-api-key']
 }));
 
 // 中间件
-app.use(cors());
 app.use(express.json({ limit: '5mb' }));  // 增加限制以容纳更多数据
 app.use(morgan('dev'));  // 日志
+
 
 // 连接到MongoDB
 mongoose.connect(process.env.MONGODB_URI)
@@ -37,14 +51,15 @@ app.use('/api/students', studentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/auth', authRoutes);
 
-// 静态文件服务 - 生产环境
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
-  });
-}
+
+
+// 静态文件服务 - 生产环境和开发环境都使用相同配置
+app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+// 所有未匹配的路由返回React应用
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
+});
 
 // 错误处理中间件
 app.use((err, req, res, next) => {

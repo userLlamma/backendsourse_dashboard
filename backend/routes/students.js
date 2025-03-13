@@ -175,4 +175,10 @@ router.post('/:studentId/command', authenticate, async (req, res) => {
   }
 });
 
+router.post('/test-report', (req, res) => {
+  console.log('Test report endpoint reached');
+  console.log('Headers:', req.headers);
+  res.json({ success: true, message: 'Test endpoint working' });
+});
+
 module.exports = router;
