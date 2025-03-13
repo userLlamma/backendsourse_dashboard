@@ -1,8 +1,9 @@
+// Modified createAdmin.js
 require('dotenv').config();
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
-// 连接到MongoDB
+// Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB 连接成功'))
   .catch(err => {
@@ -13,19 +14,24 @@ mongoose.connect(process.env.MONGODB_URI)
 
 const createAdmin = async () => {
   try {
-    // 检查是否已存在
+    // Check if admin already exists
     const existingAdmin = await User.findOne({ username: 'admin' });
     
     if (existingAdmin) {
       console.log('管理员用户已存在');
       process.exit(0);
     }
+
+    if (!process.env.ADMIN_PASSWORD) {
+      console.error('错误: 需要设置 ADMIN_PASSWORD 环境变量');
+      process.exit(1);
+    }
     
-    // 创建新管理员
+    // Create new admin using env variables
     const admin = new User({
-      username: 'admin',
-      password: 'your_secure_password', // 会自动哈希
-      name: '系统管理员',
+      username: process.env.ADMIN_USERNAME || 'admin',
+      password: process.env.ADMIN_PASSWORD, // This will be hashed automatically
+      name: process.env.ADMIN_NAME || '系统管理员',
       role: 'admin'
     });
     
