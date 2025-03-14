@@ -1,4 +1,4 @@
-// backend/models/Student.js
+// backend/models/Student.js - 添加挑战码和硬件签名相关字段
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -69,6 +69,42 @@ const StudentSchema = new mongoose.Schema({
   registered: {
     type: Boolean,
     default: false
+  },
+  // 新增：挑战-响应认证相关字段
+  authChallenge: {
+    challenge: String,
+    expiresAt: Date
+  },
+  verificationStatus: {
+    isVerified: {
+      type: Boolean,
+      default: false
+    },
+    lastVerified: Date,
+    verificationHistory: [{
+      timestamp: Date,
+      success: Boolean,
+      ipAddress: String,
+      hardwareSignatureId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'HardwareSignature'
+      },
+      notes: String
+    }]
+  },
+  // 可疑行为标记
+  suspiciousActivity: {
+    isFlagged: {
+      type: Boolean,
+      default: false
+    },
+    reason: String,
+    flaggedAt: Date,
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reviewNotes: String
   }
 }, { timestamps: true });
 
@@ -88,6 +124,35 @@ StudentSchema.pre('save', async function(next) {
 // Verify password method
 StudentSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// 新增：记录验证历史
+StudentSchema.methods.recordVerification = async function(success, ipAddress, hardwareSignatureId, notes) {
+  this.verificationStatus.verificationHistory.push({
+    timestamp: new Date(),
+    success,
+    ipAddress,
+    hardwareSignatureId,
+    notes
+  });
+  
+  if (success) {
+    this.verificationStatus.isVerified = true;
+    this.verificationStatus.lastVerified = new Date();
+  }
+  
+  return this.save();
+};
+
+// 新增：标记可疑活动
+StudentSchema.methods.flagAsSuspicious = async function(reason) {
+  this.suspiciousActivity = {
+    isFlagged: true,
+    reason,
+    flaggedAt: new Date()
+  };
+  
+  return this.save();
 };
 
 module.exports = mongoose.model('Student', StudentSchema);
