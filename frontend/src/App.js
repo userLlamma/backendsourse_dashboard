@@ -8,7 +8,7 @@ import PrivateRoute from './components/PrivateRoute';
 import Dashboard from './pages/Dashboard';
 import StudentList from './pages/StudentList';
 import StudentDetail from './pages/StudentDetail';
-// import Leaderboard from './pages/Leaderboard';
+import Leaderboard from './pages/Leaderboard';
 import Login from './pages/Login';
 import NavBar from './components/NavBar';
 
@@ -59,7 +59,7 @@ function App() {
               }
             />
             
-            {/* <Route
+            <Route
               path="/leaderboard"
               element={
                 <PrivateRoute>
@@ -70,7 +70,7 @@ function App() {
                 </PrivateRoute>
               }
             />
-             */}
+            
             {/* 默认重定向到dashboard */}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

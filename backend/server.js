@@ -8,12 +8,6 @@ const morgan = require('morgan');
 require('dotenv').config();
 
 const app = express();
-// debug
-app.post('/test-direct', (req, res) => {
-  console.log('Direct test endpoint reached');
-  console.log('Headers:', req.headers);
-  res.json({ success: true, message: 'Direct test endpoint working' });
-});
 
 // 安全配置 - 为开发环境禁用严格的CSP设置
 app.use(helmet({
