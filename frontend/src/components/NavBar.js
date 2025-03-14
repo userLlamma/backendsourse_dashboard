@@ -10,13 +10,19 @@ const NavBar = () => {
   
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    if (currentUser?.isStudent) {
+      navigate('/student-login');
+    } else {
+      navigate('/login');
+    }
   };
   
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-primary">
       <div className="container-fluid">
-        <Link className="navbar-brand" to="/">课程监控系统</Link>
+        <Link className="navbar-brand" to={currentUser?.isStudent ? `/students/${currentUser.studentId}` : "/"}>
+          课程监控系统 {currentUser?.isStudent && '- 学生版'}
+        </Link>
         
         <button 
           className="navbar-toggler" 
@@ -29,22 +35,37 @@ const NavBar = () => {
         
         <div className="collapse navbar-collapse" id="navbarNav">
           <ul className="navbar-nav me-auto">
-            <li className="nav-item">
-              <Link 
-                className={`nav-link ${location.pathname === '/' ? 'active' : ''}`} 
-                to="/"
-              >
-                仪表板
-              </Link>
-            </li>
-            <li className="nav-item">
-              <Link 
-                className={`nav-link ${location.pathname === '/students' ? 'active' : ''}`} 
-                to="/students"
-              >
-                学生列表
-              </Link>
-            </li>
+            {/* 教师菜单项 */}
+            {currentUser && !currentUser.isStudent && (
+              <>
+                <li className="nav-item">
+                  <Link 
+                    className={`nav-link ${location.pathname === '/' ? 'active' : ''}`} 
+                    to="/"
+                  >
+                    仪表板
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link 
+                    className={`nav-link ${location.pathname === '/students' ? 'active' : ''}`} 
+                    to="/students"
+                  >
+                    学生列表
+                  </Link>
+                </li>
+                <li className="nav-item">
+                  <Link 
+                    className={`nav-link ${location.pathname === '/student-management' ? 'active' : ''}`} 
+                    to="/student-management"
+                  >
+                    学生管理
+                  </Link>
+                </li>
+              </>
+            )}
+            
+            {/* 公共菜单项 */}
             <li className="nav-item">
               <Link 
                 className={`nav-link ${location.pathname === '/leaderboard' ? 'active' : ''}`} 
@@ -53,13 +74,26 @@ const NavBar = () => {
                 排行榜
               </Link>
             </li>
+            
+            {/* 学生菜单项 */}
+            {currentUser && currentUser.isStudent && (
+              <li className="nav-item">
+                <Link 
+                  className={`nav-link ${location.pathname === `/students/${currentUser.studentId}` ? 'active' : ''}`} 
+                  to={`/students/${currentUser.studentId}`}
+                >
+                  我的详情
+                </Link>
+              </li>
+            )}
           </ul>
           
           <div className="d-flex align-items-center">
             {currentUser && (
               <>
                 <span className="text-light me-3">
-                  欢迎, {currentUser.name || currentUser.username}
+                  {currentUser.isStudent ? '学生: ' : '教师: '}
+                  {currentUser.name || currentUser.username || currentUser.studentId}
                 </span>
                 <button 
                   className="btn btn-outline-light" 

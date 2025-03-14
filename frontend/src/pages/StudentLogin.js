@@ -1,23 +1,24 @@
-// frontend/src/pages/Login.js
+// frontend/src/pages/StudentLogin.js
 import React, { useState, useContext, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
+import { Link } from 'react-router-dom';
 
-const Login = () => {
-  const [username, setUsername] = useState('');
+const StudentLogin = () => {
+  const [studentId, setStudentId] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  const { teacherLogin, error, currentUser } = useContext(AuthContext);
+  const { studentLogin, error, currentUser } = useContext(AuthContext);
   const navigate = useNavigate();
   
   useEffect(() => {
-    // 如果已登录，重定向到首页
-    if (currentUser && !currentUser.isStudent) {
-      navigate('/');
-    } else if (currentUser && currentUser.isStudent) {
-      // 如果已登录为学生，重定向到学生详情页
+    // 如果已登录，重定向到学生详情页
+    if (currentUser && currentUser.isStudent) {
       navigate(`/students/${currentUser.studentId}`);
+    } else if (currentUser && !currentUser.isStudent) {
+      // 如果已登录为教师，重定向到首页
+      navigate('/');
     }
   }, [currentUser, navigate]);
   
@@ -25,10 +26,10 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
     
-    const success = await teacherLogin(username, password);
+    const success = await studentLogin(studentId, password);
     
     if (success) {
-      navigate('/');
+      navigate(`/students/${studentId}`);
     }
     
     setIsLoading(false);
@@ -37,11 +38,11 @@ const Login = () => {
   return (
     <div className="login-container d-flex justify-content-center align-items-center vh-100">
       <div className="card login-card" style={{ maxWidth: '400px', width: '100%' }}>
-        <div className="card-header bg-primary text-white">
+        <div className="card-header bg-success text-white">
           <h4 className="mb-0">课程监控系统</h4>
         </div>
         <div className="card-body">
-          <h5 className="card-title text-center mb-4">教师登录</h5>
+          <h5 className="card-title text-center mb-4">学生登录</h5>
           
           {error && (
             <div className="alert alert-danger" role="alert">
@@ -51,13 +52,13 @@ const Login = () => {
           
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label htmlFor="username" className="form-label">用户名</label>
+              <label htmlFor="studentId" className="form-label">学号</label>
               <input
                 type="text"
                 className="form-control"
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                id="studentId"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
                 required
               />
             </div>
@@ -72,11 +73,12 @@ const Login = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              <div className="form-text">初始密码与学号相同，首次使用reporter.js后可登录</div>
             </div>
             
             <button 
               type="submit" 
-              className="btn btn-primary w-100 mt-3"
+              className="btn btn-success w-100 mt-3"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -84,17 +86,25 @@ const Login = () => {
                   <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                   &nbsp;登录中...
                 </>
-              ) : '教师登录'}
+              ) : '学生登录'}
             </button>
             
             <div className="text-center mt-3">
-              <Link to="/student-login" className="btn btn-link">学生登录</Link>
+              <Link to="/login" className="btn btn-link">教师登录</Link>
             </div>
           </form>
+          
+          <div className="alert alert-info mt-4">
+            <h6 className="alert-heading">学生须知</h6>
+            <p className="mb-0">
+              1. 首次登录前需使用reporter.js上报你的API状态<br/>
+              2. 如果忘记密码，请联系教师重置
+            </p>
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-export default Login;
+export default StudentLogin;

@@ -12,20 +12,31 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // 检查本地存储的token
     const token = localStorage.getItem('authToken');
+    const userType = localStorage.getItem('userType'); // 'teacher' or 'student'
     
     if (token) {
       // 设置axios默认头部
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      // 验证token
+      // 验证token (根据用户类型)
       const verifyToken = async () => {
         try {
-          const res = await axios.get('/api/auth/me');
-          setCurrentUser(res.data);
+          let res;
+          if (userType === 'student') {
+            res = await axios.get('/api/student-auth/me');
+          } else {
+            res = await axios.get('/api/auth/me');
+          }
+          
+          setCurrentUser({
+            ...res.data,
+            isStudent: userType === 'student'
+          });
           setError(null);
         } catch (err) {
           // Token无效，清除本地存储
           localStorage.removeItem('authToken');
+          localStorage.removeItem('userType');
           delete axios.defaults.headers.common['Authorization'];
           setCurrentUser(null);
           setError('登录会话已过期，请重新登录');
@@ -40,8 +51,8 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
   
-  // 登录
-  const login = async (username, password) => {
+  // 教师登录
+  const teacherLogin = async (username, password) => {
     try {
       setLoading(true);
       setError(null);
@@ -50,11 +61,43 @@ export const AuthProvider = ({ children }) => {
       
       // 保存token到本地存储
       localStorage.setItem('authToken', res.data.token);
+      localStorage.setItem('userType', 'teacher');
       
       // 设置axios默认头部
       axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
       
-      setCurrentUser(res.data.user);
+      setCurrentUser({
+        ...res.data.user,
+        isStudent: false
+      });
+      return true;
+    } catch (err) {
+      setError(err.response?.data?.error || '登录失败');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 学生登录
+  const studentLogin = async (studentId, password) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const res = await axios.post('/api/student-auth/login', { studentId, password });
+      
+      // 保存token到本地存储
+      localStorage.setItem('authToken', res.data.token);
+      localStorage.setItem('userType', 'student');
+      
+      // 设置axios默认头部
+      axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+      
+      setCurrentUser({
+        ...res.data.user,
+        isStudent: true
+      });
       return true;
     } catch (err) {
       setError(err.response?.data?.error || '登录失败');
@@ -68,6 +111,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     // 清除本地存储
     localStorage.removeItem('authToken');
+    localStorage.removeItem('userType');
     
     // 清除axios头部
     delete axios.defaults.headers.common['Authorization'];
@@ -79,7 +123,8 @@ export const AuthProvider = ({ children }) => {
     currentUser,
     loading,
     error,
-    login,
+    teacherLogin,
+    studentLogin,
     logout
   };
   

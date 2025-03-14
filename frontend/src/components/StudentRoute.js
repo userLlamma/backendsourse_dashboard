@@ -1,9 +1,13 @@
-// frontend/src/components/PrivateRoute.js
+// frontend/src/components/StudentRoute.js
 import React, { useContext } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 
-const PrivateRoute = ({ children, allowStudent = false }) => {
+/**
+ * Component for student-only routes with student ID validation
+ * Students can only access their own data
+ */
+const StudentRoute = ({ children }) => {
   const { currentUser, loading } = useContext(AuthContext);
   const { studentId } = useParams();
   
@@ -20,7 +24,7 @@ const PrivateRoute = ({ children, allowStudent = false }) => {
   
   // 如果未登录，重定向到登录页
   if (!currentUser) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/student-login" />;
   }
   
   // 如果是教师，总是允许访问
@@ -28,17 +32,13 @@ const PrivateRoute = ({ children, allowStudent = false }) => {
     return children;
   }
   
-  // 如果是学生且路由允许学生访问
-  if (currentUser.isStudent && allowStudent) {
-    // 如果有学生ID参数，确保只能访问自己的页面
-    if (studentId && studentId !== currentUser.studentId) {
-      return <Navigate to={`/students/${currentUser.studentId}`} />;
-    }
+  // 学生只能访问自己的数据
+  if (currentUser.studentId === studentId) {
     return children;
   }
   
-  // 学生尝试访问教师专属页面，重定向到自己的详情页
+  // 如果是学生但尝试访问其他学生的数据，重定向到自己的详情页
   return <Navigate to={`/students/${currentUser.studentId}`} />;
 };
 
-export default PrivateRoute;
+export default StudentRoute;
