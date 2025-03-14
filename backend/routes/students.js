@@ -101,6 +101,7 @@ router.post('/report', async (req, res) => {
       student.lastReportTime = new Date(timestamp || Date.now());
       student.todoCount = data.todoCount || 0;
       student.todos = data.todos || [];
+      student.registered = true;  // 更新注册状态
       
       if (data.testResults) {
         student.lastTestResults = {
@@ -112,16 +113,22 @@ router.post('/report', async (req, res) => {
       }
     } else {
       // 创建新学生
-      student = new Student({
-        studentId,
-        name,
-        ipAddress,
-        port,
-        status: 'online',
-        lastReportTime: new Date(timestamp || Date.now()),
-        todoCount: data.todoCount || 0,
-        todos: data.todos || []
+      // 如果学生不存在，不允许自注册
+      return res.status(401).json({ 
+        error: '未授权：学生ID未预先注册，请联系教师进行账号注册'
       });
+      // 若允许自注册
+      // student = new Student({
+      //   studentId,
+      //   name,
+      //   ipAddress,
+      //   port,
+      //   status: 'online',
+      //   lastReportTime: new Date(timestamp || Date.now()),
+      //   todoCount: data.todoCount || 0,
+      //   todos: data.todos || [],
+      //   registered: true 
+      // });
     }
     
     await student.save();

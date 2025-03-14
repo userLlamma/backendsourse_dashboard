@@ -58,12 +58,15 @@ const authRoutes = require('./routes/auth');
 const studentAuthRoutes = require('./routes/studentAuth');
 const studentManagementRoutes = require('./routes/studentManagement');
 
+const exportDataRoutes = require('./routes/exportData');   // 导出成绩
+
 // 使用路由
 app.use('/api/students', studentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/student-auth', studentAuthRoutes);
 app.use('/api/student-management', studentManagementRoutes);
+app.use('/api/export', exportDataRoutes);
 
 // 数据库备份路由 (仅管理员)
 const { authenticate } = require('./middleware/auth');

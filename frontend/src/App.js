@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import StudentLogin from './pages/StudentLogin';
 import StudentManagement from './pages/StudentManagement';
 import NavBar from './components/NavBar';
+import GradeExport from './pages/GradeExport';  // 成绩导出
 
 import './App.css';
 
@@ -59,6 +60,19 @@ function App() {
                   <NavBar />
                   <div className="content-container">
                     <StudentManagement />
+                  </div>
+                </PrivateRoute>
+              }
+            />
+
+            {/* 成绩导出 - 仅教师可见 */}
+            <Route
+              path="/grade-export"
+              element={
+                <PrivateRoute allowStudent={false}>
+                  <NavBar />
+                  <div className="content-container">
+                    <GradeExport />
                   </div>
                 </PrivateRoute>
               }

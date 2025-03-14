@@ -62,6 +62,16 @@ const NavBar = () => {
                     学生管理
                   </Link>
                 </li>
+
+                <li className="nav-item">
+                  <Link 
+                    className={`nav-link ${location.pathname === '/grade-export' ? 'active' : ''}`} 
+                    to="/grade-export"
+                  >
+                    成绩导出
+                  </Link>
+                </li>
+
               </>
             )}
             
