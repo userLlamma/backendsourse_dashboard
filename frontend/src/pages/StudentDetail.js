@@ -12,6 +12,11 @@ const StudentDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('info');
+
+  const [selectedTest, setSelectedTest] = useState(null);
+  const [selectedTestScore, setSelectedTestScore] = useState(0);
+  const [selectedTestComment, setSelectedTestComment] = useState('');
+  const [updatedTests, setUpdatedTests] = useState([]);
   
   // 获取学生详情
   const fetchStudentDetails = async () => {
@@ -42,6 +47,72 @@ const StudentDetail = () => {
     
     return () => clearInterval(interval);
   }, [studentId]);
+
+  // 初始化更新状态
+  useEffect(() => {
+    if (student && student.lastTestResults && student.lastTestResults.tests) {
+      setUpdatedTests([...student.lastTestResults.tests]);
+    }
+  }, [student]);
+
+  // 处理评分变更
+  const handleScoreChange = (index, value) => {
+    const newTests = [...updatedTests];
+    if (!newTests[index].score) {
+      newTests[index].score = { value: 0, maxValue: 10 };
+    }
+    newTests[index].score.value = value;
+    setUpdatedTests(newTests);
+  };
+
+  // 打开测试详情
+  const openTestDetails = (test) => {
+    setSelectedTest(test);
+    setSelectedTestScore(test.score?.value || 0);
+    setSelectedTestComment(test.score?.comments || '');
+  };
+
+  // 保存选中测试的评分
+  const saveSelectedTestScore = () => {
+    const newTests = [...updatedTests];
+    const index = newTests.findIndex(t => t.name === selectedTest.name);
+    
+    if (index !== -1) {
+      if (!newTests[index].score) {
+        newTests[index].score = { maxValue: 10 };
+      }
+      newTests[index].score.value = selectedTestScore;
+      newTests[index].score.comments = selectedTestComment;
+      setUpdatedTests(newTests);
+    }
+    
+    setSelectedTest(null);
+  };
+
+  // 保存所有评分
+  const saveTestScores = async () => {
+    try {
+      setLoading(true);
+      
+      // 计算总分
+      const totalScore = updatedTests.reduce((sum, test) => sum + (test.score?.value || 0), 0);
+      const maxPossibleScore = updatedTests.reduce((sum, test) => sum + (test.score?.maxValue || 10), 0);
+      
+      await axios.post(`/api/students/${studentId}/update-test-scores`, {
+        tests: updatedTests,
+        totalScore,
+        maxPossibleScore
+      });
+      
+      fetchStudentDetails(); // 刷新数据
+      alert('评分已保存');
+    } catch (err) {
+      setError('保存评分失败');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // 发送命令到学生
   const sendCommand = async (command, params = {}) => {
@@ -330,26 +401,22 @@ const StudentDetail = () => {
                   ) : (
                     <div>
                       <div className="mb-3">
-                        <strong>总得分:</strong> {student.lastTestResults.score} 分
-                      </div>
-                      
-                      <div className="mb-3">
-                        <strong>通过率:</strong>
+                        <strong>总得分:</strong> {student.lastTestResults.score || 0} / {student.lastTestResults.maxPossibleScore || 0} 分
                         <div className="progress mt-2">
                           <div
                             className="progress-bar"
                             role="progressbar"
                             style={{ 
-                              width: `${(student.lastTestResults.totalPassed / 
-                                (student.lastTestResults.totalPassed + student.lastTestResults.totalFailed)) * 100}%` 
+                              width: `${student.lastTestResults.maxPossibleScore ? 
+                                (student.lastTestResults.score / student.lastTestResults.maxPossibleScore) * 100 : 0}%` 
                             }}
-                            aria-valuenow={(student.lastTestResults.totalPassed / 
-                              (student.lastTestResults.totalPassed + student.lastTestResults.totalFailed)) * 100}
+                            aria-valuenow={student.lastTestResults.maxPossibleScore ? 
+                              (student.lastTestResults.score / student.lastTestResults.maxPossibleScore) * 100 : 0}
                             aria-valuemin="0"
                             aria-valuemax="100"
                           >
-                            {Math.round((student.lastTestResults.totalPassed / 
-                              (student.lastTestResults.totalPassed + student.lastTestResults.totalFailed)) * 100)}%
+                            {student.lastTestResults.maxPossibleScore ? 
+                              Math.round((student.lastTestResults.score / student.lastTestResults.maxPossibleScore) * 100) : 0}%
                           </div>
                         </div>
                       </div>
@@ -359,7 +426,8 @@ const StudentDetail = () => {
                           <thead>
                             <tr>
                               <th>测试名称</th>
-                              <th>状态</th>
+                              <th>端点</th>
+                              <th>评分</th>
                               <th>详情</th>
                             </tr>
                           </thead>
@@ -368,20 +436,109 @@ const StudentDetail = () => {
                               <tr key={index}>
                                 <td>{test.name}</td>
                                 <td>
-                                  <span className={`badge bg-${test.passed ? 'success' : 'danger'}`}>
-                                    {test.passed ? '通过' : '失败'}
-                                  </span>
+                                  <code>{test.method} {test.endpoint}</code>
                                 </td>
                                 <td>
-                                  {test.error || (test.passed ? '测试成功' : '测试失败')}
+                                  <div className="d-flex align-items-center">
+                                    <input 
+                                      type="number" 
+                                      className="form-control form-control-sm me-2" 
+                                      style={{ width: "60px" }}
+                                      min="0" 
+                                      max={test.score?.maxValue || 10} 
+                                      value={test.score?.value || 0}
+                                      onChange={(e) => handleScoreChange(index, parseInt(e.target.value))}
+                                    />
+                                    <span>/ {test.score?.maxValue || 10}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <button 
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => openTestDetails(test)}
+                                  >
+                                    查看响应
+                                  </button>
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
+                      
+                      <div className="d-flex justify-content-end mt-3">
+                        <button 
+                          className="btn btn-primary"
+                          onClick={saveTestScores}
+                        >
+                          保存评分
+                        </button>
+                      </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 测试详情模态框 */}
+              {selectedTest && (
+                <div className="modal fade show" style={{ display: 'block' }} tabIndex="-1">
+                  <div className="modal-dialog modal-lg">
+                    <div className="modal-content">
+                      <div className="modal-header">
+                        <h5 className="modal-title">{selectedTest.name} 详细信息</h5>
+                        <button type="button" className="btn-close" onClick={() => setSelectedTest(null)}></button>
+                      </div>
+                      <div className="modal-body">
+                        <h6>请求信息</h6>
+                        <div className="mb-3">
+                          <code>{selectedTest.method} {selectedTest.endpoint}</code>
+                        </div>
+                        
+                        <h6>API响应</h6>
+                        <div className="bg-light p-3 rounded mb-3" style={{ maxHeight: '300px', overflow: 'auto' }}>
+                          <pre>{JSON.stringify(selectedTest.response, null, 2)}</pre>
+                        </div>
+                        
+                        <h6>评分</h6>
+                        <div className="row mb-3">
+                          <div className="col-md-6">
+                            <div className="input-group">
+                              <input 
+                                type="number" 
+                                className="form-control" 
+                                min="0" 
+                                max={selectedTest.score?.maxValue || 10}
+                                value={selectedTestScore}
+                                onChange={(e) => setSelectedTestScore(parseInt(e.target.value))}
+                              />
+                              <span className="input-group-text">/ {selectedTest.score?.maxValue || 10}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="mb-3">
+                          <label className="form-label">评分备注</label>
+                          <textarea 
+                            className="form-control"
+                            rows="3"
+                            value={selectedTestComment}
+                            onChange={(e) => setSelectedTestComment(e.target.value)}
+                            placeholder="输入评分备注（可选）"
+                          ></textarea>
+                        </div>
+                      </div>
+                      <div className="modal-footer">
+                        <button type="button" className="btn btn-secondary" onClick={() => setSelectedTest(null)}>关闭</button>
+                        <button 
+                          type="button" 
+                          className="btn btn-primary"
+                          onClick={saveSelectedTestScore}
+                        >
+                          保存评分
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

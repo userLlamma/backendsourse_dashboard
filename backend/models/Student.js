@@ -45,14 +45,31 @@ const StudentSchema = new mongoose.Schema({
   },
   apiVersion: String,
   lastTestResults: {
-    score: Number,
+    score: Number,           // 总得分
+    maxPossibleScore: Number, // 满分值
     totalPassed: Number,
     totalFailed: Number,
     timestamp: Date,
     tests: [{
-      name: String,
-      passed: Boolean,
-      error: String
+      name: String,          // 测试名称
+      endpoint: String,      // API端点
+      method: String,        // HTTP方法
+      passed: Boolean,       // 自动判断的通过状态
+      response: Object,      // API响应内容
+      error: String,         // 错误信息
+      score: {               // 手动评分信息
+        value: {
+          type: Number,
+          default: 0
+        },
+        maxValue: {
+          type: Number,
+          default: 10
+        },
+        gradedBy: mongoose.Schema.Types.ObjectId,
+        gradedAt: Date,
+        comments: String
+      }
     }]
   },
   todos: [{

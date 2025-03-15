@@ -102,8 +102,12 @@ router.post('/report', async (req, res) => {
       });
     }
     
-    // 1. 强制公钥验证 (除非是首次注册)
-    // 检查学生是否已注册（首次报告可以不需要签名，之后都需要）
+    // 1. 认证部分 - 单独处理，和数据库更新解耦
+    let authSuccessful = false;
+    let needsRegistration = false;
+    let pendingCommand = null;
+    
+    // 检查学生是否已注册
     if (student.registered) {
       // 已注册学生必须提供有效签名
       if (!signature) {
@@ -133,12 +137,21 @@ router.post('/report', async (req, res) => {
         });
       }
       
-      // 签名验证通过，继续处理
+      // 签名验证通过
       console.log(`学生 ${studentId} 签名验证通过，使用密钥: ${authResult.keyId}`);
+      authSuccessful = true;
     } else {
       // 首次报告，不需要签名，但需要设置为已注册
       console.log(`学生 ${studentId} 首次报告，设置为已注册`);
-      student.registered = true;
+      needsRegistration = true;
+    }
+    
+    // 如果学生有待处理命令，获取它（但不立即删除）
+    if (student.pendingCommand && student.pendingCommand.command) {
+      pendingCommand = {
+        command: student.pendingCommand.command,
+        params: student.pendingCommand.params
+      };
     }
     
     // 2. 记录硬件信息 (如果提供)
@@ -154,7 +167,7 @@ router.post('/report', async (req, res) => {
         await hwSignature.save();
         
         // 学生首次报告且没有公钥，自动注册公钥
-        if (!student.registered && signature && hardwareInfo.publicKey) {
+        if (needsRegistration && signature && hardwareInfo.publicKey) {
           await keyAuth.registerPublicKey(
             studentId, 
             hardwareInfo.publicKey,
@@ -167,28 +180,50 @@ router.post('/report', async (req, res) => {
       }
     }
     
-    // 3. 处理学生报告数据
+    // 3. 处理学生报告数据 - 使用 findOneAndUpdate 来避免版本冲突
     const { name, ipAddress, port, timestamp, data } = req.body;
     
-    // 更新学生记录
-    student.name = name;
-    student.ipAddress = ipAddress;
-    student.port = port;
-    student.status = 'online';
-    student.lastReportTime = new Date(timestamp || Date.now());
-    student.todoCount = data.todoCount || 0;
-    student.todos = data.todos || [];
+    // 创建更新对象
+    const updateData = {
+      name,
+      ipAddress,
+      port,
+      status: 'online',
+      lastReportTime: new Date(timestamp || Date.now()),
+      todoCount: data.todoCount || 0,
+      todos: data.todos || []
+    };
     
+    // 如果是首次注册，设置registered标志
+    if (needsRegistration) {
+      updateData.registered = true;
+    }
+    
+    // 如果有测试结果，添加到更新中
     if (data.testResults) {
-      student.lastTestResults = {
+      updateData.lastTestResults = {
         score: data.testsPassed * 10, // 简单计分方式
         totalPassed: data.testsPassed,
         totalFailed: data.testsTotal - data.testsPassed,
-        tests: data.testResults
+        tests: data.testResults,
+        timestamp: new Date()
       };
     }
     
-    await student.save();
+    // 执行原子更新操作
+    const updateOptions = { new: true }; // 返回更新后的文档
+    
+    // 如果有待处理命令，同时清除它
+    if (pendingCommand) {
+      updateData.pendingCommand = null;
+    }
+    
+    // 执行原子更新
+    await Student.findOneAndUpdate(
+      { studentId },
+      { $set: updateData },
+      updateOptions
+    );
     
     // 4. 返回响应，包括可能的命令
     let response = { 
@@ -196,14 +231,10 @@ router.post('/report', async (req, res) => {
       timestamp: new Date().toISOString()
     };
     
-    // 如果有待处理的命令，添加到响应中
-    if (student.pendingCommand && student.pendingCommand.command) {
-      response.command = student.pendingCommand.command;
-      response.params = student.pendingCommand.params;
-      
-      // 清除待处理命令
-      student.pendingCommand = null;
-      await student.save();
+    // 如果有待处理命令，添加到响应中
+    if (pendingCommand) {
+      response.command = pendingCommand.command;
+      response.params = pendingCommand.params;
     }
     
     // 返回响应
@@ -212,6 +243,52 @@ router.post('/report', async (req, res) => {
   } catch (error) {
     console.error('处理学生报告失败:', error);
     res.status(500).json({ error: '处理报告失败' });
+  }
+});
+
+// 更新测试评分 (需要认证)
+router.post('/:studentId/update-test-scores', authenticate, async (req, res) => {
+  try {
+    // 验证权限
+    if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
+      return res.status(403).json({ error: '权限不足' });
+    }
+    
+    const { studentId } = req.params;
+    const { tests, totalScore, maxPossibleScore } = req.body;
+    
+    // 查找学生
+    const student = await Student.findOne({ studentId });
+    
+    if (!student) {
+      return res.status(404).json({ error: '学生未找到' });
+    }
+    
+    // 更新测试结果
+    if (!student.lastTestResults) {
+      student.lastTestResults = {
+        tests: [],
+        totalPassed: 0,
+        totalFailed: 0,
+        timestamp: new Date()
+      };
+    }
+    
+    student.lastTestResults.tests = tests;
+    student.lastTestResults.score = totalScore;
+    student.lastTestResults.maxPossibleScore = maxPossibleScore;
+    
+    await student.save();
+    
+    res.json({ 
+      success: true, 
+      message: '测试评分已更新',
+      score: totalScore,
+      maxPossibleScore
+    });
+  } catch (error) {
+    console.error('更新测试评分失败:', error);
+    res.status(500).json({ error: '更新测试评分失败' });
   }
 });
 
