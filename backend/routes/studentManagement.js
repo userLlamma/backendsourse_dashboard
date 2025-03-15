@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const Student = require('../models/Student');
 const { authenticate } = require('../middleware/auth');
+const { KeyPair } = require('../utils/keyAuthentication');
 
 // Create a new student (teacher only)
 router.post('/create', authenticate, async (req, res) => {
