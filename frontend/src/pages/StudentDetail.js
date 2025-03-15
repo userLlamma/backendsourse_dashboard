@@ -63,6 +63,26 @@ const StudentDetail = () => {
       setLoading(false);
     }
   };
+
+  // 添加一个重置密钥的函数
+  const resetStudentKeys = async () => {
+    if (!window.confirm('确定要重置该学生的所有密钥吗？学生需要重新注册才能继续使用系统。')) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      await axios.post(`/api/student-management/${studentId}/reset-keys`);
+      alert('密钥重置成功，学生需要重新注册');
+      // 刷新数据
+      fetchStudentDetails();
+    } catch (err) {
+      setError('重置密钥失败');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   if (loading && !student) {
     return (
@@ -197,6 +217,19 @@ const StudentDetail = () => {
                 >
                   清理数据
                 </button>
+                <button 
+                  className="btn btn-outline-danger btn-sm"
+                  onClick={() => {
+                    if (window.confirm('确定要重置该学生的所有密钥吗？\n\n警告：重置后学生必须重新生成密钥才能继续使用系统。如果学生更换了环境（如重装系统、更换虚拟机），则需要此操作。')) {
+                      resetStudentKeys();
+                    }
+                  }}
+                >
+                  <i className="bi bi-key"></i> 重置密钥验证
+                </button>
+              </div>
+              <div className="text-center mt-2">
+                <small className="text-muted">重置密钥用于学生更换环境时恢复访问</small>
               </div>
             </div>
           </div>

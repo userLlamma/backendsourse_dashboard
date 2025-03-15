@@ -73,77 +73,142 @@ router.get('/:studentId/todos', authenticate, async (req, res) => {
   }
 });
 
-// 接收学生报告 (无需认证，但需要API密钥)
+// 接收学生报告 (强制公钥验证)
 router.post('/report', async (req, res) => {
   try {
     const apiKey = req.headers['x-api-key'];
     const studentId = req.headers['x-student-id'];
     
-    // 简单的API密钥验证 (生产环境应更复杂)
+    // 基本验证: API密钥
     if (!apiKey || apiKey !== process.env.STUDENT_API_KEY) {
       return res.status(401).json({ error: 'API密钥无效' });
     }
     
+    // 基本验证: 学号一致性
     if (!studentId || !req.body.studentId || studentId !== req.body.studentId) {
       return res.status(400).json({ error: '学生ID不匹配' });
     }
     
-    const { 
-      name, ipAddress, port, timestamp, data 
-    } = req.body;
+    // 获取签名和硬件信息
+    const { signature, hardwareInfo } = req.body;
     
-    // 更新或创建学生记录
+    // 查找学生记录
     let student = await Student.findOne({ studentId });
     
-    if (student) {
-      // 更新现有学生
-      student.name = name;
-      student.ipAddress = ipAddress;
-      student.port = port;
-      student.status = 'online';
-      student.lastReportTime = new Date(timestamp || Date.now());
-      student.todoCount = data.todoCount || 0;
-      student.todos = data.todos || [];
-      student.registered = true;  // 更新注册状态
-      
-      if (data.testResults) {
-        student.lastTestResults = {
-          score: data.testsPassed * 10, // 简单计分方式
-          totalPassed: data.testsPassed,
-          totalFailed: data.testsTotal - data.testsPassed,
-          tests: data.testResults
-        };
-      }
-    } else {
-      // 创建新学生
-      // 如果学生不存在，不允许自注册
+    // 如果学生不存在，不允许自注册
+    if (!student) {
       return res.status(401).json({ 
         error: '未授权：学生ID未预先注册，请联系教师进行账号注册'
       });
-      // 若允许自注册
-      // student = new Student({
-      //   studentId,
-      //   name,
-      //   ipAddress,
-      //   port,
-      //   status: 'online',
-      //   lastReportTime: new Date(timestamp || Date.now()),
-      //   todoCount: data.todoCount || 0,
-      //   todos: data.todos || [],
-      //   registered: true 
-      // });
+    }
+    
+    // 1. 强制公钥验证 (除非是首次注册)
+    // 检查学生是否已注册（首次报告可以不需要签名，之后都需要）
+    if (student.registered) {
+      // 已注册学生必须提供有效签名
+      if (!signature) {
+        return res.status(401).json({ 
+          error: '需要签名验证',
+          requiresAuth: true,
+          challenge: (await keyAuth.generateChallenge(studentId)).challenge
+        });
+      }
+      
+      // 如果教师端已经重置密钥，则立刻返回，要求学生重新注册
+      if (student.needsReauthentication) {
+        return res.status(401).json({ 
+          error: '教师已重置您的密钥，请重新注册',
+          requiresReregistration: true
+        });
+      }
+
+      // 验证签名
+      const authResult = await keyAuth.verifySignature(studentId, signature);
+      
+      if (!authResult.success) {
+        return res.status(401).json({ 
+          error: authResult.error || '签名验证失败',
+          requiresAuth: true,
+          challenge: (await keyAuth.generateChallenge(studentId)).challenge
+        });
+      }
+      
+      // 签名验证通过，继续处理
+      console.log(`学生 ${studentId} 签名验证通过，使用密钥: ${authResult.keyId}`);
+    } else {
+      // 首次报告，不需要签名，但需要设置为已注册
+      console.log(`学生 ${studentId} 首次报告，设置为已注册`);
+      student.registered = true;
+    }
+    
+    // 2. 记录硬件信息 (如果提供)
+    if (hardwareInfo) {
+      try {
+        // 创建硬件签名记录
+        const hwSignature = new HardwareSignature({
+          student: student._id,
+          signature: hardwareInfo,
+          ipAddress: req.ip
+        });
+        
+        await hwSignature.save();
+        
+        // 学生首次报告且没有公钥，自动注册公钥
+        if (!student.registered && signature && hardwareInfo.publicKey) {
+          await keyAuth.registerPublicKey(
+            studentId, 
+            hardwareInfo.publicKey,
+            hardwareInfo.hostname || '首次注册设备'
+          );
+        }
+      } catch (hwError) {
+        console.error('记录硬件信息失败:', hwError);
+        // 继续处理请求，不因硬件信息记录失败而中断
+      }
+    }
+    
+    // 3. 处理学生报告数据
+    const { name, ipAddress, port, timestamp, data } = req.body;
+    
+    // 更新学生记录
+    student.name = name;
+    student.ipAddress = ipAddress;
+    student.port = port;
+    student.status = 'online';
+    student.lastReportTime = new Date(timestamp || Date.now());
+    student.todoCount = data.todoCount || 0;
+    student.todos = data.todos || [];
+    
+    if (data.testResults) {
+      student.lastTestResults = {
+        score: data.testsPassed * 10, // 简单计分方式
+        totalPassed: data.testsPassed,
+        totalFailed: data.testsTotal - data.testsPassed,
+        tests: data.testResults
+      };
     }
     
     await student.save();
     
-    // 确认接收并返回可能的命令
-    res.status(200).json({ 
+    // 4. 返回响应，包括可能的命令
+    let response = { 
       message: '报告接收成功',
-      timestamp: new Date().toISOString(),
-      // 可以在这里返回命令给学生执行
-      // command: 'RUN_TEST',
-      // params: { testName: 'all' }
-    });
+      timestamp: new Date().toISOString()
+    };
+    
+    // 如果有待处理的命令，添加到响应中
+    if (student.pendingCommand && student.pendingCommand.command) {
+      response.command = student.pendingCommand.command;
+      response.params = student.pendingCommand.params;
+      
+      // 清除待处理命令
+      student.pendingCommand = null;
+      await student.save();
+    }
+    
+    // 返回响应
+    res.status(200).json(response);
+    
   } catch (error) {
     console.error('处理学生报告失败:', error);
     res.status(500).json({ error: '处理报告失败' });

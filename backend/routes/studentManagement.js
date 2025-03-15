@@ -168,4 +168,65 @@ router.post('/batch', authenticate, async (req, res) => {
   }
 });
 
+// 重置学生密钥 (仅教师/管理员)
+router.post('/:studentId/reset-keys', authenticate, async (req, res) => {
+  try {
+    // 验证用户是否有权限
+    if (req.user.role !== 'teacher' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: '权限不足' });
+    }
+    
+    const { studentId } = req.params;
+    
+    // 找到该学生
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ error: '学生不存在' });
+    }
+    
+    // 1. 吊销所有现有密钥
+    const keyPairs = await KeyPair.find({ studentId });
+    for (const keyPair of keyPairs) {
+      keyPair.revoked = {
+        isRevoked: true,
+        revokedAt: new Date(),
+        revokedBy: req.user.id,
+        reason: '教师重置'
+      };
+      await keyPair.save();
+    }
+    
+    // 2. 重置学生的验证状态
+    student.verificationStatus = {
+      isVerified: false,
+      verificationHistory: [
+        ...student.verificationStatus?.verificationHistory || [],
+        {
+          timestamp: new Date(),
+          success: false,
+          notes: `由教师 ${req.user.username || req.user.id} 重置密钥`
+        }
+      ]
+    };
+    
+    // 3. 清除挑战码
+    student.authChallenge = null;
+    
+    // 4. 将学生标记为"需要重新验证"
+    student.needsReauthentication = true;
+    
+    await student.save();
+    
+    res.json({ 
+      success: true, 
+      message: `已成功重置学生 ${studentId} 的密钥验证状态`,
+      keysRevoked: keyPairs.length
+    });
+    
+  } catch (error) {
+    console.error('重置学生密钥失败:', error);
+    res.status(500).json({ error: '重置学生密钥失败' });
+  }
+});
+
 module.exports = router;
