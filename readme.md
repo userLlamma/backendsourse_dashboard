@@ -1,260 +1,209 @@
-# Backend Monitoring System
+# 课程监控系统
 
-## Project Overview
+这是一个用于监控学生API开发课程进度的系统，教师可以实时查看学生的API实现状态、测试结果、待办事项和活动情况。
 
-This project is a comprehensive monitoring system designed to track and report the status of student-developed backend applications running on local VMs within a LAN environment. The monitoring system is deployed on a public VPS and collects real-time data about API performance, system status, and task completion from student applications.
+## 系统概述
 
-## Features
+课程监控系统是一个全栈应用，分为前端和后端两部分：
 
-- 🔍 Real-time monitoring of student backend applications
-- 📊 Dashboard visualization of application metrics
-- 🔐 User authentication for instructors and students
-- 📡 Automated status reporting from VM instances
-- 📝 Task completion tracking and verification
-- 📈 Performance metrics collection and analysis
-- 🔔 Alert system for offline applications or failed APIs
+- **前端**：基于React的管理界面，提供给教师和学生使用
+- **后端**：基于Express的RESTful API服务
 
-## Architecture
+系统支持教师端和学生端两种角色，具有完善的认证机制和实时监控功能。
 
-### VPS Server (Public Internet)
-- Node.js & Express.js monitoring server
-- TiDB Cloud for data persistence
-- Dashboard for instructors to view all student applications
-- Authentication system to manage access
+### 主要功能
 
-### Student VM Applications (LAN)
-- Local Node.js applications reporting status to VPS
-- Automated heartbeat system to verify online status
-- API result validation and reporting
-- Task completion verification
+- **教师端**：
+  - 实时监控所有学生的在线状态和活动情况
+  - 查看学生API测试结果和待办事项
+  - 学生账号管理（创建、重置密码、删除）
+  - 成绩导出（支持Excel和CSV格式）
+  - 学生设备认证管理
+  - 硬件环境监控（检测潜在的代替完成情况）
 
-## Project Structure
+- **学生端**：
+  - 查看个人API测试结果和详情
+  - 管理待办事项
+  - 查看班级排行榜
+
+## 系统架构
+
+### 技术栈
+
+- **前端**：React + Bootstrap 5 + Axios
+- **后端**：Node.js + Express + MongoDB
+- **认证**：JWT (JSON Web Token)
+- **安全**：bcryptjs密码加密 + 公钥/私钥签名认证
+
+### 目录结构
 
 ```
-.
-├── backend
-│   ├── middleware
-│   │   └── auth.js           # Authentication middleware
-│   ├── models
-│   │   ├── Student.js        # Student data model
-│   │   └── User.js           # User and instructor model
-│   ├── routes
-│   │   ├── auth.js           # Authentication routes
-│   │   ├── dashboard.js      # Monitoring dashboard routes
-│   │   └── students.js       # Student application management routes
-│   ├── scripts
-│   │   └── createadmin.js    # Script to create admin user
-│   └── server.js             # Main server file
-├── data                      # Data storage directory
-├── frontend
-│   ├── build                 # Production build
-│   ├── public                # Static files
-│   └── src
-│       ├── components        # Reusable React components
-│       ├── contexts          # React context providers
-│       ├── pages             # Page components
-│       └── ...               # Other frontend files
-├── package.json              # Project dependencies and scripts
-└── .gitignore                # Git ignore configuration
+/
+├── backend/                # 后端代码
+│   ├── middleware/         # 中间件（认证等）
+│   ├── models/             # 数据模型
+│   ├── routes/             # API路由
+│   ├── scripts/            # 管理脚本
+│   ├── utils/              # 工具函数
+│   └── server.js           # 服务器入口
+├── frontend/               # 前端代码
+│   ├── public/             # 静态资源
+│   └── src/                # 源代码
+│       ├── components/     # 组件
+│       ├── contexts/       # 上下文（认证等）
+│       └── pages/          # 页面组件
+└── package.json            # 项目配置
 ```
 
-## Deployment Guide
+## 安装与配置
 
-### VPS Server Setup (For Instructors)
+### 系统要求
 
-1. Provision a VPS with the following minimum requirements:
-   - 2 CPU cores
-   - 4GB RAM
-   - 50GB SSD storage
-   - Public IP address
+- Node.js v14+
+- MongoDB 4.0+
+- NPM 6+
 
-2. Clone the repository:
+### 环境变量配置
+
+在根目录创建`.env`文件，配置以下环境变量：
+
+```
+# 数据库配置
+MONGODB_URI=mongodb://localhost:27017/course_monitor
+
+# JWT密钥（用于认证）
+JWT_SECRET=your_jwt_secret_key
+
+# 学生API通信密钥
+STUDENT_API_KEY=your_api_key
+
+# 管理员账号（首次运行时创建）
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your_admin_password
+ADMIN_NAME=系统管理员
+
+# 备份配置（可选）
+ENABLE_AUTO_BACKUP=true
+BACKUP_INTERVAL=86400000  # 以毫秒为单位，默认24小时
+```
+
+### 安装步骤
+
+1. 克隆仓库：
    ```bash
    git clone <repository-url>
-   cd <project-directory>
+   cd course-monitor
    ```
 
-3. Install dependencies:
+2. 安装依赖：
    ```bash
-   npm install
-   cd frontend
-   npm install
-   cd ..
-   ```
-
-4. Set up environment variables:
-   Create a `.env` file with the following variables:
-   ```
-   DB_HOST=your-tidb-host.tidbcloud.com
-   DB_PORT=4000
-   DB_USER=your-username
-   DB_PASSWORD=your-password
-   DB_NAME=monitoring_db
-   ADMIN_USERNAME=admin
-   ADMIN_PASSWORD=secure_password
-   JWT_SECRET=your-jwt-secret
-   PORT=3000
-   ```
-
-5. Initialize the database:
-   ```bash
-   node backend/scripts/createadmin.js
-   ```
-
-6. Start the server:
-   ```bash
-   npm run start
-   ```
-
-7. Set up NGINX as a reverse proxy (recommended):
-   ```bash
-   sudo apt-get install nginx
-   ```
-   Configure NGINX to proxy requests to your Node.js server.
-
-8. Secure the server with SSL (Let's Encrypt):
-   ```bash
-   sudo apt-get install certbot python3-certbot-nginx
-   sudo certbot --nginx -d yourdomain.com
-   ```
-
-### Student VM Setup
-
-1. Ensure your VM meets requirements:
-   - Ubuntu Server 22.04
-   - 2 CPU cores
-   - 4GB RAM
-   - 50GB storage
-   - NAT network mode
-
-2. Configure network settings as specified in course material:
-   ```bash
-   sudo vim /etc/netplan/00-installer-config.yaml
+   npm run setup
    ```
    
-   Apply network configuration:
+   此命令会自动安装后端和前端依赖，并构建前端项目。
+
+3. 创建管理员账号：
    ```bash
-   sudo netplan apply
+   npm run create-admin
    ```
 
-3. Install Node.js:
+4. 启动服务：
    ```bash
-   bash -c "$(curl -fsSL https://gitee.com/RubyMetric/nvm-cn/raw/main/install.sh)"
-   nvm install node
-   nvm use node
+   npm start
    ```
 
-4. Clone the student reporting client:
-   ```bash
-   git clone <student-client-repo-url>
-   cd <student-client-directory>
-   npm install
-   ```
+## 使用指南
 
-5. Configure the client with your student information:
-   Create a `.env` file with:
-   ```
-   STUDENT_NAME=Your Name
-   STUDENT_ID=Your ID
-   MONITORING_SERVER=https://monitor.example.com
-   API_KEY=your-assigned-api-key
-   ```
+### 教师登录
 
-6. Start your application with monitoring enabled:
-   ```bash
-   npm run start
-   ```
+1. 访问系统首页 `/login`
+2. 使用管理员账号或教师账号登录
+3. 登录后可以查看仪表板、学生列表等功能
 
-## API Endpoints
+### 学生账号管理
 
-### Monitoring Server (VPS)
+1. 在"学生管理"页面可以创建新学生账号
+2. 支持批量导入学生（格式：学号,姓名）
+3. 可以重置学生密码和公钥认证
 
-#### Authentication
-- `POST /api/auth/login` - Instructor login
-- `GET /api/auth/me` - Get current user
+### 学生登录
 
-#### Dashboard
-- `GET /api/dashboard` - Get overview of all student applications
-- `GET /api/dashboard/stats` - Get aggregated statistics
+1. 访问 `/student-login` 页面
+2. 输入学号和密码（初始密码为学号）
+3. 登录后可以查看个人信息和排行榜
 
-#### Student Management
-- `GET /api/students` - List all registered student applications
-- `GET /api/students/:id` - Get specific student application details
-- `PUT /api/students/:id/verify` - Manually verify a student's work
+## 系统安全
 
-### Student Client (VM)
+### 认证机制
 
-#### Status Reporting
-- `POST /todos` - Create a todo item (monitored)
-- `GET /todos` - List todo items (monitored)
-- `DELETE /todos/:id` - Delete a todo item (monitored)
-- `PATCH /todos/:id` - Update todo completion status (monitored)
+1. **教师认证**：使用JWT令牌认证，有效期12小时
+2. **学生认证**：支持两种认证方式
+   - JWT令牌认证（网页登录）
+   - 公钥/私钥签名认证（reporter客户端）
 
-#### Monitoring Integration
-- `POST /status/heartbeat` - Send periodic heartbeat to monitoring server
-- `POST /status/api-result` - Report API test results
-- `POST /status/system-info` - Report system resource usage
+### 设备认证与防作弊
 
-## Monitoring Features
+系统具有硬件环境检测功能，可以：
+1. 记录学生每次连接的硬件环境指纹
+2. 检测异常的环境变化（可能表示代替完成）
+3. 支持设备认证密钥管理，防止未授权访问
 
-### For Instructors
-1. **Real-time Dashboard**
-   - See which student applications are online/offline
-   - View API success rates and errors
-   - Track task completion across all students
+## 系统维护
 
-2. **Individual Student Reports**
-   - Detailed view of each student's progress
-   - API test results history
-   - System resource utilization
+### 数据备份
 
-3. **Batch Operations**
-   - Send test commands to all student applications
-   - Reset or restart student environments
-   - Deploy updated configurations
+系统支持自动数据备份，可在`.env`文件中配置：
+- `ENABLE_AUTO_BACKUP=true`：启用自动备份
+- `BACKUP_INTERVAL=86400000`：备份间隔（毫秒）
 
-### For Students
-1. **Status Dashboard**
-   - View your own application status
-   - See which APIs are working correctly
-   - Track your progress on assignments
+### 排障指南
 
-2. **Automated Reporting**
-   - System automatically reports API test results
-   - Periodic heartbeats verify your application is online
-   - Resource usage monitoring to detect issues
+- **登录失败**：检查JWT_SECRET配置是否正确
+- **学生上报失败**：检查STUDENT_API_KEY是否正确设置
+- **数据库连接问题**：检查MONGODB_URI配置
 
-## Troubleshooting
+## 学生上报接入
 
-### Common VPS Issues
-- **Database Connection Failures**: Verify TiDB connection string and credentials
-- **NGINX Configuration**: Check NGINX error logs at `/var/log/nginx/error.log`
-- **SSL Certification**: Ensure Certbot has properly set up certificates
+学生需要开发一个reporter客户端与系统集成，主要步骤：
 
-### Common VM Issues
-- **Network Connectivity**: Ensure the VM can reach the VPS using `ping monitor.example.com`
-- **API Reporting Failures**: Check client logs for connection timeouts
-- **Authentication Issues**: Verify your API key is correctly configured
+1. 初始化：使用学号和密码注册
+2. 生成密钥对：创建公钥/私钥对进行签名认证
+3. 定期上报：发送API测试结果和待办事项状态
 
-## Security Considerations
+详细的reporter开发文档请参考[学生开发指南](./student-guide.md)。
 
-1. **API Keys**: Each student is assigned a unique API key for authentication
-2. **Rate Limiting**: Monitoring requests are rate-limited to prevent abuse
-3. **Data Isolation**: Student data is isolated to prevent cross-access
-4. **SSL**: All communications between VMs and VPS are encrypted
+## 开发者文档
 
-## Performance Optimization
+### API接口
 
-1. **Batched Reporting**: Status updates are batched to reduce network overhead
-2. **Scheduled Reporting**: Non-critical metrics are reported on a schedule
-3. **Compression**: Response data is compressed to reduce bandwidth
+系统提供多个API接口，主要包括：
 
-## License
+- 认证相关：`/api/auth/*`和`/api/student-auth/*`
+- 学生管理：`/api/student-management/*`
+- 数据展示：`/api/dashboard/*`
+- 学生数据：`/api/students/*`
+- 数据导出：`/api/export/*`
 
-This project is part of an academic course and is subject to the course's licensing terms.
+完整API文档请参考[API文档](./api-docs.md)。
 
-## Acknowledgements
+### 扩展开发
 
-- TiDB Cloud for providing a free database tier
-- Public Cloud providers for VPS hosting
-- VMware for virtualization software
+如需扩展系统功能，请参考以下步骤：
+
+1. 后端扩展：
+   - 在`models/`中定义新的数据模型
+   - 在`routes/`中创建新的API路由
+   - 在`server.js`中注册路由
+
+2. 前端扩展：
+   - 在`src/pages/`中创建新页面组件
+   - 在`src/components/`中创建新组件
+   - 在`App.js`中添加路由
+
+## 许可证
+
+请查看LICENSE文件了解详细的许可信息。
+
+## 联系方式
+
+如有问题或建议，请联系课程管理员。
