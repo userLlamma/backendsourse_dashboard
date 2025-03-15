@@ -99,6 +99,28 @@ const StudentManagement = () => {
     }
   };
   
+  // 重置学生密钥
+  const handleResetKeys = async (studentId) => {
+    if (!window.confirm(`确定要重置学生 ${studentId} 的所有密钥吗？\n\n警告：重置后学生必须重新生成密钥才能继续使用系统。如果学生更换了环境（如重装系统、更换虚拟机），则需要此操作。`)) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const response = await axios.post(`/api/student-management/${studentId}/reset-keys`);
+      
+      alert(`密钥重置成功: ${response.data.message}`);
+      
+      // 刷新学生列表
+      fetchStudents();
+    } catch (err) {
+      setError(err.response?.data?.error || '重置密钥失败');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 删除学生 (仅管理员)
   const handleDeleteStudent = async (studentId) => {
     if (!isAdmin) {
@@ -436,6 +458,15 @@ const StudentManagement = () => {
                         >
                           重置密码
                         </button>
+
+                        <button
+                          className="btn btn-sm btn-warning me-1"
+                          onClick={() => handleResetKeys(student.studentId)}
+                          title="重置密钥验证(用于学生更换环境)"
+                        >
+                          重置公钥
+                          <i className="bi bi-key"></i>
+                        </button>
                         
                         {isAdmin && (
                           <button
@@ -452,6 +483,15 @@ const StudentManagement = () => {
               </table>
             </div>
           )}
+
+          <div className="alert alert-info mt-3">
+            <h6>操作说明</h6>
+            <ul className="mb-0">
+              <li><strong>重置密码：</strong>重置学生的登录密码</li>
+              <li><strong>重置公钥验证：</strong>用于学生更换环境（如重装系统、更换虚拟机）时恢复访问能力。重置后，学生需要重新生成公钥并setup才能继续使用系统。</li>
+              <li><strong>删除：</strong>完全删除学生账号（仅管理员可操作）</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
