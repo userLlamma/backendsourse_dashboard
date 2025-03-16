@@ -203,19 +203,22 @@ router.post('/report', async (req, res) => {
     if (data.testResults) {
       const testsPassed = Number(data.testsPassed) || 0;
       const testsTotal = Number(data.testsTotal) || 0;
-
+      
       console.log("收到测试数据:", {
         testsPassed,
         testsTotal,
         testResults: data.testResults,
-        testResults: data.testResults.tests[1]
       });
+      
+      // 确保 data.testResults 是一个数组
+      const testsArray = Array.isArray(data.testResults) ? data.testResults : 
+        (data.testResults.tests && Array.isArray(data.testResults.tests)) ? data.testResults.tests : [];
       
       updateData.lastTestResults = {
         score: testsPassed * 10, // 简单计分方式
         totalPassed: testsPassed,
         totalFailed: Math.max(0, testsTotal - testsPassed), // 确保不为负数
-        tests: data.testResults,
+        tests: testsArray,
         timestamp: new Date()
       };
     }
@@ -274,6 +277,26 @@ router.post('/:studentId/update-test-scores', authenticate, async (req, res) => 
       return res.status(404).json({ error: '学生未找到' });
     }
     
+    // 确保测试数据格式完整
+    const processedTests = tests.map(test => {
+      // 保留原始测试数据中的所有字段
+      return {
+        name: test.name || '未命名测试',
+        endpoint: test.endpoint || '未知端点',
+        method: test.method || 'GET',
+        passed: test.passed || false,
+        response: test.response || null,
+        error: test.error || null,
+        score: {
+          value: test.score?.value || 0,
+          maxValue: test.score?.maxValue || 10,
+          comments: test.score?.comments || '',
+          gradedBy: req.user.id,
+          gradedAt: new Date()
+        }
+      };
+    });
+    
     // 更新测试结果
     if (!student.lastTestResults) {
       student.lastTestResults = {
@@ -284,7 +307,7 @@ router.post('/:studentId/update-test-scores', authenticate, async (req, res) => 
       };
     }
     
-    student.lastTestResults.tests = tests;
+    student.lastTestResults.tests = processedTests;
     student.lastTestResults.score = totalScore;
     student.lastTestResults.maxPossibleScore = maxPossibleScore;
     

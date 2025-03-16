@@ -55,6 +55,29 @@ const StudentDetail = () => {
     }
   }, [student]);
 
+  // 补充：检查student.lastTestResults.tests的结构
+  useEffect(() => {
+    if (student && student.lastTestResults && student.lastTestResults.tests) {
+      // 输出更详细的测试数据结构
+      console.log('Tests data structure:', JSON.stringify(student.lastTestResults.tests, null, 2));
+      
+      // 处理可能存在的数据结构问题
+      const fixedTests = student.lastTestResults.tests.map(test => {
+        if (typeof test !== 'object') return { name: '未知测试', score: { value: 0, maxValue: 10 } };
+        if (!test.score) test.score = { value: 0, maxValue: 10 };
+        return test;
+      });
+      
+      setUpdatedTests(fixedTests);
+    }
+  }, [student]);
+
+  // debug：显示测试对象的结构
+  const debugTestObject = (test) => {
+    console.log('Test object structure:', JSON.stringify(test, null, 2));
+    return test;
+  };
+
   // 处理评分变更
   const handleScoreChange = (index, value) => {
     const newTests = [...updatedTests];
@@ -66,10 +89,28 @@ const StudentDetail = () => {
   };
 
   // 打开测试详情
+  // openTestDetails函数来处理不完整的测试对象
   const openTestDetails = (test) => {
-    setSelectedTest(test);
-    setSelectedTestScore(test.score?.value || 0);
-    setSelectedTestComment(test.score?.comments || '');
+    console.log('Opening test details:', test);
+    
+    // 调试对象结构
+    debugTestObject(test);
+    
+    // 创建一个完整的测试对象，填充缺失的字段
+    const completeTest = {
+      name: test.name || '未命名测试',
+      endpoint: test.endpoint || '未知端点',
+      method: test.method || 'GET',
+      passed: test.passed || false,
+      response: test.response || null,
+      error: test.error || '无错误信息',
+      score: test.score || { value: 0, maxValue: 10 }
+    };
+    
+    // 使用完整的测试对象
+    setSelectedTest(completeTest);
+    setSelectedTestScore(completeTest.score.value || 0);
+    setSelectedTestComment(completeTest.score.comments || '');
   };
 
   // 保存选中测试的评分
@@ -370,22 +411,41 @@ const StudentDetail = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {todos.map(todo => (
-                            <tr key={todo.id}>
-                              <td>{todo.id}</td>
-                              <td>{todo.title}</td>
-                              <td>
-                                {todo.completed !== undefined && (
-                                  <span className={`badge bg-${todo.completed ? 'success' : 'secondary'}`}>
-                                    {todo.completed ? '已完成' : '未完成'}
-                                  </span>
-                                )}
-                              </td>
-                              <td>
-                                {todo.created_at ? new Date(todo.created_at).toLocaleString() : '未知'}
-                              </td>
-                            </tr>
-                          ))}
+                          {student.lastTestResults.tests.map((test, index) => {
+                            // 确保测试对象有完整的score属性
+                            if (!test.score) test.score = { value: 0, maxValue: 10 };
+                            
+                            return (
+                              <tr key={index}>
+                                <td>{test.name || `测试项 ${index+1}`}</td>
+                                <td>
+                                  <code>{test.method || 'GET'} {test.endpoint || '未知'}</code>
+                                </td>
+                                <td>
+                                  <div className="d-flex align-items-center">
+                                    <input 
+                                      type="number" 
+                                      className="form-control form-control-sm me-2" 
+                                      style={{ width: "60px" }}
+                                      min="0" 
+                                      max={test.score.maxValue || 10} 
+                                      value={test.score.value || 0}
+                                      onChange={(e) => handleScoreChange(index, parseInt(e.target.value))}
+                                    />
+                                    <span>/ {test.score.maxValue || 10}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <button 
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => openTestDetails(test)}
+                                  >
+                                    查看响应
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -495,18 +555,39 @@ const StudentDetail = () => {
                   <div className="modal-dialog modal-lg">
                     <div className="modal-content">
                       <div className="modal-header">
-                        <h5 className="modal-title">{selectedTest.name} 详细信息</h5>
+                        <h5 className="modal-title">{selectedTest.name || '测试详情'}</h5>
                         <button type="button" className="btn-close" onClick={() => setSelectedTest(null)}></button>
                       </div>
                       <div className="modal-body">
-                        <h6>请求信息</h6>
+                        <h6>测试信息</h6>
                         <div className="mb-3">
-                          <code>{selectedTest.method} {selectedTest.endpoint}</code>
+                          <div><strong>端点:</strong> <code>{selectedTest.endpoint || '未知'}</code></div>
+                          <div><strong>请求方法:</strong> <code>{selectedTest.method || '未知'}</code></div>
                         </div>
                         
-                        <h6>API响应</h6>
+                        <h6>测试状态</h6>
+                        <div className="mb-3">
+                          <span className={`badge bg-${selectedTest.passed ? 'success' : 'danger'}`}>
+                            {selectedTest.passed ? '通过' : '失败'}
+                          </span>
+                          {selectedTest.error && selectedTest.error !== '无错误信息' && (
+                            <div className="alert alert-danger mt-2">
+                              错误: {selectedTest.error}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <h6>API响应数据</h6>
                         <div className="bg-light p-3 rounded mb-3" style={{ maxHeight: '300px', overflow: 'auto' }}>
-                          <pre>{JSON.stringify(selectedTest.response, null, 2)}</pre>
+                          {selectedTest.response ? (
+                            typeof selectedTest.response === 'object' ? (
+                              <pre>{JSON.stringify(selectedTest.response, null, 2)}</pre>
+                            ) : (
+                              <pre>{String(selectedTest.response)}</pre>
+                            )
+                          ) : (
+                            <div className="text-muted">无响应数据</div>
+                          )}
                         </div>
                         
                         <h6>评分</h6>
@@ -551,6 +632,7 @@ const StudentDetail = () => {
                   </div>
                 </div>
               )}
+
             </div>
           </div>
         </div>
