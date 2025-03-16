@@ -286,7 +286,10 @@ const StudentDetail = () => {
                 <li className="nav-item">
                   <button
                     className={`nav-link ${activeTab === 'tests' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('tests')}
+                    onClick={() => {
+                      console.log("Setting active tab to tests");
+                      setActiveTab('tests');
+                    }}
                   >
                     测试结果
                   </button>
@@ -394,9 +397,16 @@ const StudentDetail = () => {
                 <div>
                   <h5 className="card-title">API测试结果</h5>
                   
+                  {console.log('Student in tests tab:', student)}
+                  {console.log('lastTestResults:', student?.lastTestResults)}
+                  
                   {!student.lastTestResults ? (
                     <div className="alert alert-info">
                       该学生尚未进行API测试
+                    </div>
+                  ) : !student.lastTestResults.tests || student.lastTestResults.tests.length === 0 ? (
+                    <div className="alert alert-warning">
+                      测试结果存在但没有测试项目数据
                     </div>
                   ) : (
                     <div>

@@ -201,10 +201,20 @@ router.post('/report', async (req, res) => {
     
     // 如果有测试结果，添加到更新中
     if (data.testResults) {
+      const testsPassed = Number(data.testsPassed) || 0;
+      const testsTotal = Number(data.testsTotal) || 0;
+
+      console.log("收到测试数据:", {
+        testsPassed,
+        testsTotal,
+        testResults: data.testResults,
+        testResults: data.testResults.tests[1]
+      });
+      
       updateData.lastTestResults = {
-        score: data.testsPassed * 10, // 简单计分方式
-        totalPassed: data.testsPassed,
-        totalFailed: data.testsTotal - data.testsPassed,
+        score: testsPassed * 10, // 简单计分方式
+        totalPassed: testsPassed,
+        totalFailed: Math.max(0, testsTotal - testsPassed), // 确保不为负数
         tests: data.testResults,
         timestamp: new Date()
       };
