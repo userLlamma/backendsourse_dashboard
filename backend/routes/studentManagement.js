@@ -198,6 +198,7 @@ router.post('/:studentId/reset-keys', authenticate, async (req, res) => {
     }
     
     // 2. 重置学生的验证状态
+    student.registered = false;
     student.verificationStatus = {
       isVerified: false,
       verificationHistory: [
