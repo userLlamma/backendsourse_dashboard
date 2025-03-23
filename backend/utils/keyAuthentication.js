@@ -243,6 +243,23 @@ const revokePublicKey = async (keyId, reason, revokedBy) => {
     
     await keyPair.save();
     
+    // 检查是否还有有效的密钥
+    const validKeys = await KeyPair.find({
+      studentId: keyPair.studentId,
+      'revoked.isRevoked': { $ne: true }
+    });
+    
+    // 如果没有有效密钥，更新学生状态为未注册
+    if (validKeys.length === 0) {
+      const student = await Student.findOne({ studentId: keyPair.studentId });
+      if (student) {
+        student.registered = false;
+        student.verificationStatus.isVerified = false;
+        student.needsReauthentication = true;
+        await student.save();
+      }
+    }
+    
     return { success: true, message: '公钥已吊销' };
   } catch (error) {
     console.error('吊销公钥失败:', error);

@@ -55,29 +55,6 @@ const StudentDetail = () => {
     }
   }, [student]);
 
-  // 补充：检查student.lastTestResults.tests的结构
-  useEffect(() => {
-    if (student && student.lastTestResults && student.lastTestResults.tests) {
-      // 输出更详细的测试数据结构
-      console.log('Tests data structure:', JSON.stringify(student.lastTestResults.tests, null, 2));
-      
-      // 处理可能存在的数据结构问题
-      const fixedTests = student.lastTestResults.tests.map(test => {
-        if (typeof test !== 'object') return { name: '未知测试', score: { value: 0, maxValue: 10 } };
-        if (!test.score) test.score = { value: 0, maxValue: 10 };
-        return test;
-      });
-      
-      setUpdatedTests(fixedTests);
-    }
-  }, [student]);
-
-  // debug：显示测试对象的结构
-  const debugTestObject = (test) => {
-    console.log('Test object structure:', JSON.stringify(test, null, 2));
-    return test;
-  };
-
   // 处理评分变更
   const handleScoreChange = (index, value) => {
     const newTests = [...updatedTests];
@@ -89,13 +66,7 @@ const StudentDetail = () => {
   };
 
   // 打开测试详情
-  // openTestDetails函数来处理不完整的测试对象
   const openTestDetails = (test) => {
-    console.log('Opening test details:', test);
-    
-    // 调试对象结构
-    debugTestObject(test);
-    
     // 创建一个完整的测试对象，填充缺失的字段
     const completeTest = {
       name: test.name || '未命名测试',
@@ -107,7 +78,6 @@ const StudentDetail = () => {
       score: test.score || { value: 0, maxValue: 10 }
     };
     
-    // 使用完整的测试对象
     setSelectedTest(completeTest);
     setSelectedTestScore(completeTest.score.value || 0);
     setSelectedTestComment(completeTest.score.comments || '');
@@ -327,10 +297,7 @@ const StudentDetail = () => {
                 <li className="nav-item">
                   <button
                     className={`nav-link ${activeTab === 'tests' ? 'active' : ''}`}
-                    onClick={() => {
-                      console.log("Setting active tab to tests");
-                      setActiveTab('tests');
-                    }}
+                    onClick={() => setActiveTab('tests')}
                   >
                     测试结果
                   </button>
@@ -400,54 +367,148 @@ const StudentDetail = () => {
                       该学生尚未创建任何待办事项
                     </div>
                   ) : (
-                    <div className="table-responsive">
-                      <table className="table table-striped">
-                        <thead>
-                          <tr>
-                            <th>ID</th>
-                            <th>标题</th>
-                            <th>状态</th>
-                            <th>创建时间</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {student.lastTestResults.tests.map((test, index) => {
-                            // 确保测试对象有完整的score属性
-                            if (!test.score) test.score = { value: 0, maxValue: 10 };
-                            
-                            return (
-                              <tr key={index}>
-                                <td>{test.name || `测试项 ${index+1}`}</td>
-                                <td>
-                                  <code>{test.method || 'GET'} {test.endpoint || '未知'}</code>
-                                </td>
-                                <td>
-                                  <div className="d-flex align-items-center">
-                                    <input 
-                                      type="number" 
-                                      className="form-control form-control-sm me-2" 
-                                      style={{ width: "60px" }}
-                                      min="0" 
-                                      max={test.score.maxValue || 10} 
-                                      value={test.score.value || 0}
-                                      onChange={(e) => handleScoreChange(index, parseInt(e.target.value))}
-                                    />
-                                    <span>/ {test.score.maxValue || 10}</span>
-                                  </div>
-                                </td>
-                                <td>
-                                  <button 
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={() => openTestDetails(test)}
-                                  >
-                                    查看响应
-                                  </button>
-                                </td>
+                    <div className="card">
+                      <div className="card-body">
+                        <div className="row mb-3">
+                          <div className="col-md-6">
+                            <h6>
+                              <span className="badge bg-primary me-2">{todos.length}</span>
+                              总待办事项
+                            </h6>
+                          </div>
+                          <div className="col-md-6 text-end">
+                            <h6>
+                              <span className="badge bg-success me-2">
+                                {todos.filter(todo => todo.completed).length}
+                              </span>
+                              已完成
+                            </h6>
+                          </div>
+                        </div>
+                        
+                        <div className="progress mb-3">
+                          <div 
+                            className="progress-bar bg-success" 
+                            role="progressbar" 
+                            style={{ 
+                              width: `${todos.length ? (todos.filter(todo => todo.completed).length / todos.length) * 100 : 0}%` 
+                            }}
+                            aria-valuenow={todos.length ? (todos.filter(todo => todo.completed).length / todos.length) * 100 : 0}
+                            aria-valuemin="0" 
+                            aria-valuemax="100"
+                          >
+                            {Math.round(todos.length ? (todos.filter(todo => todo.completed).length / todos.length) * 100 : 0)}%
+                          </div>
+                        </div>
+                        
+                        <div className="table-responsive">
+                          <table className="table table-striped">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '10%' }}>ID</th>
+                                <th style={{ width: '50%' }}>标题</th>
+                                <th style={{ width: '15%' }}>状态</th>
+                                <th style={{ width: '25%' }}>创建时间</th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody>
+                              {todos.map(todo => (
+                                <tr key={todo.id}>
+                                  <td>{todo.id}</td>
+                                  <td>{todo.title}</td>
+                                  <td>
+                                    <span className={`badge ${todo.completed ? 'bg-success' : 'bg-warning'}`}>
+                                      {todo.completed ? '已完成' : '进行中'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    {todo.created_at ? new Date(todo.created_at).toLocaleString() : '未知'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 可视化部分 - 待办事项状态分布 */}
+                  {todos.length > 0 && (
+                    <div className="card mt-3">
+                      <div className="card-header">
+                        <h6 className="mb-0">待办事项数据可视化</h6>
+                      </div>
+                      <div className="card-body">
+                        <div className="row">
+                          <div className="col-md-6">
+                            <h6 className="text-center mb-3">完成状态分布</h6>
+                            <div className="d-flex justify-content-center">
+                              <div className="position-relative" style={{ width: '150px', height: '150px' }}>
+                                {/* 简易饼图 */}
+                                <div className="position-absolute top-0 start-0 w-100 h-100">
+                                  <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+                                    {/* 已完成部分 */}
+                                    <circle
+                                      cx="50"
+                                      cy="50"
+                                      r="40"
+                                      fill="transparent"
+                                      stroke="#28a745"
+                                      strokeWidth="20"
+                                      strokeDasharray={`${todos.filter(todo => todo.completed).length / todos.length * 251.2} 251.2`}
+                                    />
+                                    {/* 未完成部分 */}
+                                    <circle
+                                      cx="50"
+                                      cy="50"
+                                      r="40"
+                                      fill="transparent"
+                                      stroke="#ffc107"
+                                      strokeWidth="20"
+                                      strokeDasharray={`${todos.filter(todo => !todo.completed).length / todos.length * 251.2} 251.2`}
+                                      strokeDashoffset={`-${todos.filter(todo => todo.completed).length / todos.length * 251.2}`}
+                                    />
+                                  </svg>
+                                </div>
+                                {/* 中心文字 */}
+                                <div className="position-absolute top-50 start-50 translate-middle text-center">
+                                  <h3 className="mb-0">{Math.round((todos.filter(todo => todo.completed).length / todos.length) * 100)}%</h3>
+                                  <small>完成率</small>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="d-flex justify-content-center mt-3">
+                              <div className="d-flex align-items-center me-3">
+                                <div className="badge bg-success me-1" style={{ width: '15px', height: '15px' }}></div>
+                                <span>已完成 ({todos.filter(todo => todo.completed).length})</span>
+                              </div>
+                              <div className="d-flex align-items-center">
+                                <div className="badge bg-warning me-1" style={{ width: '15px', height: '15px' }}></div>
+                                <span>进行中 ({todos.filter(todo => !todo.completed).length})</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="col-md-6">
+                            <h6 className="text-center mb-3">最近创建的待办事项</h6>
+                            <ul className="list-group">
+                              {[...todos]
+                                .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+                                .slice(0, 5)
+                                .map(todo => (
+                                  <li key={todo.id} className="list-group-item d-flex justify-content-between align-items-center">
+                                    <div className="text-truncate" style={{ maxWidth: '200px' }}>
+                                      {todo.title}
+                                    </div>
+                                    <span className={`badge ${todo.completed ? 'bg-success' : 'bg-warning'}`}>
+                                      {todo.completed ? '已完成' : '进行中'}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -456,9 +517,6 @@ const StudentDetail = () => {
               {activeTab === 'tests' && (
                 <div>
                   <h5 className="card-title">API测试结果</h5>
-                  
-                  {console.log('Student in tests tab:', student)}
-                  {console.log('lastTestResults:', student?.lastTestResults)}
                   
                   {!student.lastTestResults ? (
                     <div className="alert alert-info">

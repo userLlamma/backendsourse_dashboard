@@ -600,9 +600,25 @@ router.post('/:studentId/keys/:keyId/revoke', authenticate, async (req, res) => 
       return res.status(400).json({ error: result.error });
     }
     
+    // 查询剩余的有效密钥
+    const validKeys = await keyAuth.KeyPair.find({
+      studentId,
+      'revoked.isRevoked': { $ne: true }
+    });
+    
+    // 如果没有有效密钥，更新学生状态
+    if (validKeys.length === 0) {
+      const student = await Student.findOne({ studentId });
+      if (student) {
+        student.registered = false;
+        await student.save();
+      }
+    }
+    
     res.json({
       success: true,
-      message: '公钥已吊销'
+      message: '公钥已吊销',
+      hasValidKeys: validKeys.length > 0
     });
   } catch (error) {
     console.error('吊销公钥失败:', error);
