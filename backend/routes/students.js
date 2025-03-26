@@ -6,6 +6,7 @@ const HardwareSignature = require('../models/HardwareSignature');
 const crypto = require('crypto');
 const { authenticate } = require('../middleware/auth');
 const keyAuth = require('../utils/keyAuthentication');
+const cache = require('../utils/cache');  // 缓存
 
 // 获取所有学生 (需要认证)
 router.get('/', authenticate, async (req, res) => {
@@ -34,19 +35,36 @@ router.get('/', authenticate, async (req, res) => {
 // 获取特定学生 (需要认证)
 router.get('/:studentId', authenticate, async (req, res) => {
   try {
-    const student = await Student.findOne({ studentId: req.params.studentId });
+    const { studentId } = req.params;
     
+    // 使用自动缓存助手函数，缓存30秒
+    const student = await cache.getOrSet(
+      cache.CACHE_KEYS.STUDENT_DETAIL + studentId,
+      async () => {
+        console.log(`获取学生详情(${studentId}) - 缓存未命中`);
+        const student = await Student.findOne({ studentId });
+        if (!student) {
+          // 对于404错误，我们需要特殊处理
+          // 约定使用null表示未找到学生
+          return null;
+        }
+        return student;
+      },
+      30  // 30秒过期
+    );
+    
+    // 检查学生是否存在
     if (!student) {
       return res.status(404).json({ error: '学生未找到' });
     }
     
-    // 检查学生最后报告时间
+    // 计算学生的实时状态
     const lastReport = new Date(student.lastReportTime);
     const now = new Date();
     const diffMinutes = (now - lastReport) / (1000 * 60);
     
     const studentData = {
-      ...student.toObject(),
+      ...student.toObject ? student.toObject() : student,
       status: diffMinutes > 2 ? 'offline' : student.status
     };
     
@@ -239,6 +257,9 @@ router.post('/report', async (req, res) => {
       updateOptions
     );
     
+    // 数据库更新完成后，发送响应前，刷新缓存
+    cache.invalidateStudentCache(studentId);
+
     // 4. 返回响应，包括可能的命令
     let response = { 
       message: '报告接收成功',
@@ -313,6 +334,9 @@ router.post('/:studentId/update-test-scores', authenticate, async (req, res) => 
     student.lastTestResults.maxPossibleScore = maxPossibleScore;
     
     await student.save();
+    
+    // 成功更新后清除缓存
+    cache.invalidateStudentCache(studentId);
     
     res.json({ 
       success: true, 

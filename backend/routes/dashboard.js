@@ -1,52 +1,63 @@
 // backend/routes/dashboard.js
 const express = require('express');
-const router = express.Router();
-const Student = require('../models/Student');
-const { authenticate } = require('../middleware/auth');
+const router = express.Router();               // 路由
+const Student = require('../models/Student');  // 数据模型
+const { authenticate } = require('../middleware/auth');  // 认证
+const cache = require('../utils/cache');   // 缓存
 
 // 获取仪表板概要统计 (需要认证)
 router.get('/stats', authenticate, async (req, res) => {
   try {
-    const students = await Student.find();
+    // 使用自动缓存助手函数，缓存30秒
+    const stats = await cache.getOrSet(
+      cache.CACHE_KEYS.DASHBOARD_STATS,
+      async () => {
+        console.log('获取仪表板统计 - 缓存未命中');
+        const students = await Student.find();
+        
+        // 计算在线/离线状态
+        const now = new Date();
+        const onlineStudents = students.filter(student => {
+          const lastReport = new Date(student.lastReportTime);
+          const diffMinutes = (now - lastReport) / (1000 * 60);
+          return diffMinutes <= 2;
+        });
     
-    // 计算在线/离线状态
-    const now = new Date();
-    const onlineStudents = students.filter(student => {
-      const lastReport = new Date(student.lastReportTime);
-      const diffMinutes = (now - lastReport) / (1000 * 60);
-      return diffMinutes <= 2;
-    });
-    
-    // 计算测试通过率
-    const testResults = students
-      .filter(s => s.lastTestResults)
-      .map(s => ({
-        studentId: s.studentId,
-        name: s.name,
-        score: s.lastTestResults.score,
-        passed: s.lastTestResults.totalPassed,
-        total: s.lastTestResults.totalPassed + s.lastTestResults.totalFailed
-      }));
-    
-    // 计算通过率统计
-    const totalTests = testResults.reduce((sum, s) => sum + s.total, 0);
-    const passedTests = testResults.reduce((sum, s) => sum + s.passed, 0);
-    const avgScore = testResults.length ? 
-      testResults.reduce((sum, s) => sum + s.score, 0) / testResults.length : 0;
-    
-    // 响应统计信息
-    res.json({
-      totalStudents: students.length,
-      onlineStudents: onlineStudents.length,
-      todoItems: students.reduce((sum, s) => sum + (s.todoCount || 0), 0),
-      testStats: {
-        avgScore: Math.round(avgScore * 10) / 10,
-        passRate: totalTests ? (passedTests / totalTests) * 100 : 0,
-        totalTests,
-        passedTests
+        // 计算测试通过率
+        const testResults = students
+          .filter(s => s.lastTestResults)
+          .map(s => ({
+            studentId: s.studentId,
+            name: s.name,
+            score: s.lastTestResults.score,
+            passed: s.lastTestResults.totalPassed,
+            total: s.lastTestResults.totalPassed + s.lastTestResults.totalFailed
+          }));
+        
+        // 计算通过率统计
+        const totalTests = testResults.reduce((sum, s) => sum + s.total, 0);
+        const passedTests = testResults.reduce((sum, s) => sum + s.passed, 0);
+        const avgScore = testResults.length ? 
+          testResults.reduce((sum, s) => sum + s.score, 0) / testResults.length : 0;
+        
+        // 响应统计信息
+        return {
+          totalStudents: students.length,
+          onlineStudents: onlineStudents.length,
+          todoItems: students.reduce((sum, s) => sum + (s.todoCount || 0), 0),
+          testStats: {
+            avgScore: Math.round(avgScore * 10) / 10,
+            passRate: totalTests ? (passedTests / totalTests) * 100 : 0,
+            totalTests,
+            passedTests
+          },
+          lastUpdate: new Date()
+        };
       },
-      lastUpdate: new Date()
-    });
+      30  // 30秒过期
+    );
+    
+    res.json(stats);
   } catch (error) {
     console.error('获取仪表板统计失败:', error);
     res.status(500).json({ error: '获取仪表板统计失败' });
