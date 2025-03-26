@@ -119,13 +119,42 @@ app.listen(PORT, () => {
 });
 
 // 定期数据库备份
-if (process.env.ENABLE_AUTO_BACKUP === 'true') {
-  const { createBackup } = require('./utils/backup');
-  const BACKUP_INTERVAL = parseInt(process.env.BACKUP_INTERVAL || '86400000'); // 默认24小时
+// if (process.env.ENABLE_AUTO_BACKUP === 'true') {
+//   const { createBackup } = require('./utils/backup');
+//   const BACKUP_INTERVAL = parseInt(process.env.BACKUP_INTERVAL || '86400000'); // 默认24小时
   
-  console.log(`自动备份已启用，间隔: ${BACKUP_INTERVAL / (60 * 60 * 1000)} 小时`);
-  setInterval(createBackup, BACKUP_INTERVAL);
+//   console.log(`自动备份已启用，间隔: ${BACKUP_INTERVAL / (60 * 60 * 1000)} 小时`);
+//   setInterval(createBackup, BACKUP_INTERVAL);
   
-  // 初次启动时执行备份
-  setTimeout(createBackup, 10000);
-}
+//   // 初次启动时执行备份
+//   setTimeout(createBackup, 10000);
+// }
+
+const memoryMonitoring = () => {
+  const used = process.memoryUsage();
+  const memoryInfo = {
+    timestamp: new Date().toISOString(),
+    rss: `${Math.round(used.rss / 1024 / 1024)} MB`,
+    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)} MB`,
+    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)} MB`,
+    external: `${Math.round(used.external / 1024 / 1024)} MB`,
+    arrayBuffers: used.arrayBuffers ? `${Math.round(used.arrayBuffers / 1024 / 1024)} MB` : 'Not available'
+  };
+  
+  console.log(`[MEMORY_MONITOR] ${JSON.stringify(memoryInfo)}`);
+  
+  // 可选：如果内存使用超过阈值，记录更详细的信息
+  if (used.heapUsed > 500 * 1024 * 1024) { // 如果堆内存超过500MB
+    console.log('[MEMORY_WARNING] High memory usage detected');
+    // 这里可以添加更多诊断信息
+  }
+};
+
+// 每5分钟记录一次内存使用情况
+const memoryMonitorInterval = setInterval(memoryMonitoring, 5 * 60 * 1000);
+
+// 确保进程退出时清除定时器
+process.on('SIGINT', () => {
+  clearInterval(memoryMonitorInterval);
+  process.exit(0);
+});

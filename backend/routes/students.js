@@ -111,10 +111,11 @@ router.post('/report', async (req, res) => {
     if (student.registered) {
       // 已注册学生必须提供有效签名
       if (!signature) {
+        const challengeResult = await keyAuth.generateChallenge(studentId);
         return res.status(401).json({ 
           error: '需要签名验证',
           requiresAuth: true,
-          challenge: (await keyAuth.generateChallenge(studentId)).challenge
+          challenge: challengeResult.challenge
         });
       }
       
