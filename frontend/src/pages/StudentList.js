@@ -9,6 +9,7 @@ const StudentList = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [gradedFilter, setGradedFilter] = useState('all');
   
   // 获取学生列表
   const fetchStudents = async () => {
@@ -34,6 +35,18 @@ const StudentList = () => {
     return () => clearInterval(interval);
   }, []);
   
+  // 检查学生是否已经被评分
+  const isGradedByTeacher = (student) => {
+    if (!student.lastTestResults || !student.lastTestResults.tests) {
+      return false;
+    }
+    
+    // 检查是否至少有一个测试有教师评分
+    return student.lastTestResults.tests.some(test => 
+      test.score && test.score.gradedBy && test.score.gradedAt
+    );
+  };
+  
   // 筛选学生
   const filteredStudents = students.filter(student => {
     // 应用搜索筛选
@@ -45,7 +58,13 @@ const StudentList = () => {
                            (statusFilter === 'online' && student.status === 'online') ||
                            (statusFilter === 'offline' && student.status !== 'online');
     
-    return matchesSearch && matchesStatus;
+    // 应用评分筛选
+    const isGraded = isGradedByTeacher(student);
+    const matchesGraded = gradedFilter === 'all' ||
+                          (gradedFilter === 'graded' && isGraded) ||
+                          (gradedFilter === 'ungraded' && !isGraded);
+    
+    return matchesSearch && matchesStatus && matchesGraded;
   });
   
   if (loading && students.length === 0) {
@@ -72,7 +91,7 @@ const StudentList = () => {
       <div className="card mb-4">
         <div className="card-body">
           <div className="row">
-            <div className="col-md-6 mb-3 mb-md-0">
+            <div className="col-md-4 mb-3 mb-md-0">
               <input
                 type="text"
                 className="form-control"
@@ -82,7 +101,7 @@ const StudentList = () => {
               />
             </div>
             
-            <div className="col-md-4 mb-3 mb-md-0">
+            <div className="col-md-3 mb-3 mb-md-0">
               <select
                 className="form-select"
                 value={statusFilter}
@@ -91,6 +110,18 @@ const StudentList = () => {
                 <option value="all">全部状态</option>
                 <option value="online">在线</option>
                 <option value="offline">离线</option>
+              </select>
+            </div>
+            
+            <div className="col-md-3 mb-3 mb-md-0">
+              <select
+                className="form-select"
+                value={gradedFilter}
+                onChange={(e) => setGradedFilter(e.target.value)}
+              >
+                <option value="all">全部评分状态</option>
+                <option value="graded">已评分</option>
+                <option value="ungraded">未评分</option>
               </select>
             </div>
             
@@ -124,7 +155,8 @@ const StudentList = () => {
                 <th>状态</th>
                 <th>待办事项</th>
                 <th>最后活动</th>
-                <th>测试通过率</th>
+                <th>测试通过率/得分</th>
+                <th>评分状态</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -145,25 +177,47 @@ const StudentList = () => {
                   <td>
                     {student.lastTestResults ? (
                       <>
-                        {student.lastTestResults.totalPassed} / 
-                        {student.lastTestResults.totalPassed + student.lastTestResults.totalFailed}
-                        <div className="progress mt-1" style={{ height: '5px' }}>
-                          <div
-                            className="progress-bar"
-                            role="progressbar"
-                            style={{ 
-                              width: `${(student.lastTestResults.totalPassed / 
-                                (student.lastTestResults.totalPassed + student.lastTestResults.totalFailed)) * 100}%` 
-                            }}
-                            aria-valuenow={(student.lastTestResults.totalPassed / 
-                              (student.lastTestResults.totalPassed + student.lastTestResults.totalFailed)) * 100}
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                          ></div>
+                        <div>
+                          {student.lastTestResults.totalPassed} / 
+                          {student.lastTestResults.totalPassed + student.lastTestResults.totalFailed}
+                          <div className="progress mt-1" style={{ height: '5px' }}>
+                            <div
+                              className="progress-bar"
+                              role="progressbar"
+                              style={{ 
+                                width: `${(student.lastTestResults.totalPassed / 
+                                  (student.lastTestResults.totalPassed + student.lastTestResults.totalFailed)) * 100}%` 
+                              }}
+                              aria-valuenow={(student.lastTestResults.totalPassed / 
+                                (student.lastTestResults.totalPassed + student.lastTestResults.totalFailed)) * 100}
+                              aria-valuemin="0"
+                              aria-valuemax="100"
+                            ></div>
+                          </div>
                         </div>
+                        {/* 显示教师评分，如果有 */}
+                        {isGradedByTeacher(student) && (
+                          <div className="mt-1 small">
+                            <strong>得分: </strong>
+                            <span className="text-primary">
+                              {student.lastTestResults.score || 0} / {student.lastTestResults.maxPossibleScore || 100}
+                            </span>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <span className="text-muted">未测试</span>
+                    )}
+                  </td>
+                  <td>
+                    {student.lastTestResults ? (
+                      isGradedByTeacher(student) ? (
+                        <span className="badge bg-success">已评分</span>
+                      ) : (
+                        <span className="badge bg-warning">未评分</span>
+                      )
+                    ) : (
+                      <span className="badge bg-secondary">未测试</span>
                     )}
                   </td>
                   <td>
@@ -180,6 +234,7 @@ const StudentList = () => {
           </table>
         </div>
       )}
+      
     </div>
   );
 };
