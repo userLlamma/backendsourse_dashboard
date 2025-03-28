@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import ModelStatusPanel from '../components/ModelStatusPanel';
 
 const StudentDetail = () => {
   const { studentId } = useParams();
@@ -17,6 +18,10 @@ const StudentDetail = () => {
   const [selectedTestScore, setSelectedTestScore] = useState(0);
   const [selectedTestComment, setSelectedTestComment] = useState('');
   const [updatedTests, setUpdatedTests] = useState([]);
+
+  const [autoGradingEnabled, setAutoGradingEnabled] = useState(false);
+  const [autoGradingInProgress, setAutoGradingInProgress] = useState(false);
+  const [autoGradingStatus, setAutoGradingStatus] = useState(null);
   
   // 获取学生详情
   const fetchStudentDetails = async () => {
@@ -39,6 +44,12 @@ const StudentDetail = () => {
     }
   };
   
+  // 检查自动评分系统状态（只需执行一次）
+  useEffect(() => {
+    checkAutoGradingStatus();
+  }, []);
+
+  // 获取学生详情并设置定期刷新
   useEffect(() => {
     fetchStudentDetails();
     
@@ -46,7 +57,7 @@ const StudentDetail = () => {
     const interval = setInterval(fetchStudentDetails, 30000); // 每30秒
     
     return () => clearInterval(interval);
-  }, [studentId]);
+  }, [studentId, fetchStudentDetails]); // 添加 fetchStudentDetails 到依赖数组
 
   // 初始化更新状态
   useEffect(() => {
@@ -81,6 +92,182 @@ const StudentDetail = () => {
     setSelectedTest(completeTest);
     setSelectedTestScore(completeTest.score.value || 0);
     setSelectedTestComment(completeTest.score.comments || '');
+  };
+
+  // 获取自动评分
+  const getAutoScore = async (test) => {
+    if (!test || !test.response) {
+      alert('无法自动评分: 测试没有响应数据');
+      return;
+    }
+    
+    try {
+      setAutoGradingInProgress(true);
+      
+      // 构建测试用例信息
+      const testCase = {
+        name: test.name,
+        endpoint: test.endpoint,
+        method: test.method,
+        status: test.status,
+        expectedStatus: test.expectedStatus
+      };
+      
+      // 调用自动评分API
+      const response = await axios.post('/api/auto-grading/score', {
+        studentResponse: test.response,
+        testCase,
+        studentId
+      });
+      
+      // 更新评分
+      setSelectedTestScore(response.data.score);
+      setSelectedTestComment(`自动评分: ${response.data.score}/10\n解释: ${response.data.explanation || '根据API响应结构和内容评估'}`);
+      
+      // 保存自动评分结果状态
+      setAutoGradingStatus({
+        score: response.data.score,
+        confidence: response.data.confidence,
+        explanation: response.data.explanation,
+        details: response.data.details
+      });
+      
+      // 显示成功消息
+      alert(`自动评分完成: ${response.data.score}/10`);
+    } catch (err) {
+      console.error('自动评分失败:', err);
+      alert(`自动评分失败: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setAutoGradingInProgress(false);
+    }
+  };
+
+  // 设置参考解决方案
+  const setAsReferenceSolution = async (test) => {
+    if (!test || !test.response) {
+      alert('无法设置参考解决方案: 测试没有响应数据');
+      return;
+    }
+    
+    // 确认设置
+    if (!window.confirm(`确定要将该测试响应设置为"${test.name}"的参考解决方案吗？其他教师将使用此响应作为评分标准。`)) {
+      return;
+    }
+    
+    try {
+      // 构建测试信息
+      const testInfo = {
+        name: test.name,
+        endpoint: test.endpoint,
+        method: test.method,
+        id: Date.now().toString()
+      };
+      
+      // 调用API
+      const response = await axios.post('/api/auto-grading/reference-solution', {
+        studentId,
+        testInfo
+      });
+      
+      // 显示成功消息
+      alert(`参考解决方案设置成功!\n现在"${test.name}"将使用此学生的响应作为评分标准。`);
+    } catch (err) {
+      console.error('设置参考解决方案失败:', err);
+      alert(`设置参考解决方案失败: ${err.response?.data?.error || err.message}`);
+    }
+  };
+
+  // 向自动评分学习
+  const learnFromTestScore = async () => {
+    if (!selectedTest || !selectedTest.response) {
+      alert('无法学习: 测试没有响应数据');
+      return;
+    }
+    
+    // 确认学习
+    if (!window.confirm(`确定要让自动评分系统学习你对此测试的评分吗？系统将根据你的评分${selectedTestScore}/10提高对类似API响应的评分准确性。`)) {
+      return;
+    }
+    
+    try {
+      setAutoGradingInProgress(true);
+      
+      // 首先获取参考解决方案
+      const res = await axios.get('/api/auto-grading/status');
+      const referenceSolutions = res.data.referenceSolutions || [];
+      
+      // 查找当前测试的参考解决方案
+      const referenceSolution = referenceSolutions.find(
+        sol => sol.testName === selectedTest.name && 
+              sol.endpoint === selectedTest.endpoint
+      );
+      
+      if (!referenceSolution) {
+        alert('无法学习: 未找到此测试的参考解决方案。请先设置参考解决方案。');
+        setAutoGradingInProgress(false);
+        return;
+      }
+      
+      // 获取参考学生的测试响应
+      const refStudentRes = await axios.get(`/api/students/${referenceSolution.studentId}`);
+      const refStudent = refStudentRes.data;
+      
+      if (!refStudent || !refStudent.lastTestResults || !refStudent.lastTestResults.tests) {
+        alert('无法学习: 参考解决方案数据不可用');
+        setAutoGradingInProgress(false);
+        return;
+      }
+      
+      // 查找参考测试
+      const refTest = refStudent.lastTestResults.tests.find(
+        test => test.name === selectedTest.name && test.endpoint === selectedTest.endpoint
+      );
+      
+      if (!refTest || !refTest.response) {
+        alert('无法学习: 参考解决方案响应数据不可用');
+        setAutoGradingInProgress(false);
+        return;
+      }
+      
+      // 构建测试用例信息
+      const testCase = {
+        name: selectedTest.name,
+        endpoint: selectedTest.endpoint,
+        method: selectedTest.method
+      };
+      
+      // 调用学习API
+      const learnRes = await axios.post('/api/auto-grading/learn', {
+        studentResponse: selectedTest.response,
+        referenceResponse: refTest.response,
+        teacherScore: selectedTestScore,
+        testCase
+      });
+      
+      // 显示成功消息
+      alert(
+        learnRes.data.message + 
+        `\n当前样本数: ${learnRes.data.modelStatus.sampleCount}` +
+        (learnRes.data.modelStatus.scoreDifference ? 
+          `\n评分差异: ${learnRes.data.modelStatus.scoreDifference.toFixed(1)}分` : '')
+      );
+    } catch (err) {
+      console.error('学习失败:', err);
+      alert(`学习失败: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setAutoGradingInProgress(false);
+    }
+  };
+
+  // 检查自动评分系统状态
+  const checkAutoGradingStatus = async () => {
+    try {
+      const response = await axios.get('/api/auto-grading/status');
+      setAutoGradingEnabled(response.data.enabled);
+    } catch (err) {
+      console.error('获取自动评分状态失败:', err);
+      setAutoGradingEnabled(false);
+    }
   };
 
   // 保存选中测试的评分
@@ -602,6 +789,20 @@ const StudentDetail = () => {
                           保存评分
                         </button>
                       </div>
+
+                      {/* 添加自动评分状态面板 */}
+                      {autoGradingEnabled && (
+                        <div className="mt-4 mb-2">
+                          <div className="card">
+                            <div className="card-header bg-light">
+                              <h6 className="mb-0">自动评分模型状态</h6>
+                            </div>
+                            <div className="card-body">
+                              <ModelStatusPanel />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -648,43 +849,100 @@ const StudentDetail = () => {
                           )}
                         </div>
                         
-                        <h6>评分</h6>
-                        <div className="row mb-3">
+                        <div className="row">
                           <div className="col-md-6">
-                            <div className="input-group">
-                              <input 
-                                type="number" 
-                                className="form-control" 
-                                min="0" 
-                                max={selectedTest.score?.maxValue || 10}
-                                value={selectedTestScore}
-                                onChange={(e) => setSelectedTestScore(parseInt(e.target.value))}
-                              />
-                              <span className="input-group-text">/ {selectedTest.score?.maxValue || 10}</span>
+                            <h6>手动评分</h6>
+                            <div className="mb-3">
+                              <div className="input-group">
+                                <input 
+                                  type="number" 
+                                  className="form-control" 
+                                  min="0" 
+                                  max={selectedTest.score?.maxValue || 10}
+                                  value={selectedTestScore}
+                                  onChange={(e) => setSelectedTestScore(parseInt(e.target.value))}
+                                />
+                                <span className="input-group-text">/ {selectedTest.score?.maxValue || 10}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="mb-3">
+                              <label className="form-label">评分备注</label>
+                              <textarea 
+                                className="form-control"
+                                rows="3"
+                                value={selectedTestComment}
+                                onChange={(e) => setSelectedTestComment(e.target.value)}
+                                placeholder="输入评分备注（可选）"
+                              ></textarea>
+                            </div>
+                            
+                            <div className="mb-3">
+                              <button
+                                type="button"
+                                className="btn btn-primary w-100"
+                                onClick={saveSelectedTestScore}
+                              >
+                                保存评分
+                              </button>
                             </div>
                           </div>
-                        </div>
-                        
-                        <div className="mb-3">
-                          <label className="form-label">评分备注</label>
-                          <textarea 
-                            className="form-control"
-                            rows="3"
-                            value={selectedTestComment}
-                            onChange={(e) => setSelectedTestComment(e.target.value)}
-                            placeholder="输入评分备注（可选）"
-                          ></textarea>
+                          
+                          <div className="col-md-6">
+                            {autoGradingEnabled && (
+                              <div>
+                                <h6>自动评分</h6>
+                                <div className="mb-3">
+                                  <button
+                                    type="button"
+                                    className="btn btn-success w-100 mb-2"
+                                    onClick={() => getAutoScore(selectedTest)}
+                                    disabled={autoGradingInProgress || !selectedTest.response}
+                                  >
+                                    {autoGradingInProgress ? (
+                                      <span>
+                                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        评分中...
+                                      </span>
+                                    ) : '自动评分'}
+                                  </button>
+                                  
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline-primary w-100 mb-2"
+                                    onClick={learnFromTestScore}
+                                    disabled={autoGradingInProgress}
+                                  >
+                                    学习此评分
+                                  </button>
+                                  
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline-warning w-100"
+                                    onClick={() => setAsReferenceSolution(selectedTest)}
+                                    disabled={autoGradingInProgress || !selectedTest.response}
+                                  >
+                                    设为参考解决方案
+                                  </button>
+                                </div>
+                                
+                                {/* 自动评分结果 */}
+                                {autoGradingStatus && (
+                                  <div className="alert alert-info">
+                                    <h6>自动评分结果: {autoGradingStatus.score}/10</h6>
+                                    <div className="small">
+                                      <div><strong>置信度:</strong> {Math.round(autoGradingStatus.confidence * 100)}%</div>
+                                      <div><strong>解释:</strong> {autoGradingStatus.explanation}</div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="modal-footer">
                         <button type="button" className="btn btn-secondary" onClick={() => setSelectedTest(null)}>关闭</button>
-                        <button 
-                          type="button" 
-                          className="btn btn-primary"
-                          onClick={saveSelectedTestScore}
-                        >
-                          保存评分
-                        </button>
                       </div>
                     </div>
                   </div>

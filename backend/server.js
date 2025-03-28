@@ -6,6 +6,7 @@ const path = require('path');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const fs = require('fs');
+const autoGradingRoutes = require('./routes/autoGrading');        // 自动评分功能
 require('dotenv').config();
 
 const app = express();
@@ -51,6 +52,12 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
+// 确保数据目录存在
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
 // 导入路由
 const studentRoutes = require('./routes/students');
 const dashboardRoutes = require('./routes/dashboard');
@@ -67,6 +74,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/student-auth', studentAuthRoutes);
 app.use('/api/student-management', studentManagementRoutes);
 app.use('/api/export', exportDataRoutes);
+app.use('/api/auto-grading', autoGradingRoutes);           // 自动评分
 
 // 数据库备份路由 (仅管理员)
 const { authenticate } = require('./middleware/auth');
