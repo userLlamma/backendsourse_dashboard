@@ -6,19 +6,35 @@ import axios from 'axios';
  * 自动评分模型状态面板
  * 显示模型指标、云API使用情况和系统状态
  */
-const ModelStatusPanel = () => {
+const ModelStatusPanel = ({ refreshTrigger, autoGradingEnabled, onStatusChange }) => {
   const [modelStatus, setModelStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [actionInProgress, setActionInProgress] = useState(false);
+  const [lastFetchTime, setLastFetchTime] = useState(0);
   
   // 获取模型状态
-  const fetchModelStatus = async () => {
+  const fetchModelStatus = async (force = false) => {
     try {
+      // 避免频繁请求
+      const now = Date.now();
+      if (!force && now - lastFetchTime < 5000) {
+        console.log('跳过模型状态请求 - 节流');
+        return;
+      }
+      
       setLoading(true);
+      setLastFetchTime(now);
+      
       const response = await axios.get('/api/auto-grading/status');
       setModelStatus(response.data);
+      
+      // 如果父组件提供了回调，通知它当前状态
+      if (onStatusChange && response.data.enabled !== autoGradingEnabled) {
+        onStatusChange(response.data.enabled);
+      }
+      
       setError(null);
     } catch (err) {
       setError('获取模型状态失败');
@@ -28,15 +44,44 @@ const ModelStatusPanel = () => {
     }
   };
   
-  // 初始加载
+  // 初始化加载
   useEffect(() => {
-    fetchModelStatus();
-    
-    // 设置定期刷新
-    const interval = setInterval(fetchModelStatus, 60000); // 每分钟刷新一次
-    
-    return () => clearInterval(interval);
+    fetchModelStatus(true);
   }, []);
+  
+  // 监听refreshTrigger变化
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      fetchModelStatus();
+    }
+  }, [refreshTrigger]);
+  
+  // 切换自动评分系统启用状态
+  const handleToggleSystem = async () => {
+    try {
+      setActionInProgress(true);
+      
+      const newStatus = !(modelStatus?.enabled);
+      await axios.put('/api/auto-grading/config', {
+        enabled: newStatus
+      });
+      
+      alert(`自动评分系统已${newStatus ? '启用' : '禁用'}`);
+      
+      // 刷新状态
+      fetchModelStatus(true);
+      
+      // 通知父组件状态已改变
+      if (onStatusChange) {
+        onStatusChange(newStatus);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || '更新系统状态失败');
+      alert('更新失败: ' + (err.response?.data?.error || '未知错误'));
+    } finally {
+      setActionInProgress(false);
+    }
+  };
   
   // 训练模型
   const handleTrainModel = async () => {
@@ -89,27 +134,7 @@ const ModelStatusPanel = () => {
       setActionInProgress(false);
     }
   };
-  
-  // 切换自动评分系统启用状态
-  const handleToggleSystem = async () => {
-    try {
-      setActionInProgress(true);
-      
-      const newStatus = !modelStatus.enabled;
-      const response = await axios.put('/api/auto-grading/config', {
-        enabled: newStatus
-      });
-      
-      alert(`自动评分系统已${newStatus ? '启用' : '禁用'}`);
-      fetchModelStatus();
-    } catch (err) {
-      setError(err.response?.data?.error || '更新系统状态失败');
-      alert('更新失败: ' + (err.response?.data?.error || '未知错误'));
-    } finally {
-      setActionInProgress(false);
-    }
-  };
-  
+    
   // 更新云API提供商
   const handleUpdateCloudProvider = async (provider) => {
     try {

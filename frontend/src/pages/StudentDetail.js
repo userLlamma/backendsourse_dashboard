@@ -1,5 +1,5 @@
 // frontend/src/pages/StudentDetail.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef  } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ModelStatusPanel from '../components/ModelStatusPanel';
@@ -22,24 +22,36 @@ const StudentDetail = () => {
   const [autoGradingEnabled, setAutoGradingEnabled] = useState(false);
   const [autoGradingInProgress, setAutoGradingInProgress] = useState(false);
   const [autoGradingStatus, setAutoGradingStatus] = useState(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // 添加防重复请求控制
+  const [lastRequestTime, setLastRequestTime] = useState(0);
+  const isRequestInProgressRef = useRef(false);
   
   // 获取学生详情
-  const fetchStudentDetails = async () => {
+  const fetchStudentDetails = async (force = false) => {
+    // 防止重复请求
+    const now = Date.now();
+    if (!force && (isRequestInProgressRef.current || now - lastRequestTime < 5000)) {
+      console.log('跳过重复请求 - 间隔过短或请求已在进行中');
+      return;
+    }
+    
     try {
+      isRequestInProgressRef.current = true;
+      setLastRequestTime(now);
       setLoading(true);
       
       // 获取学生基本信息
       const studentRes = await axios.get(`/api/students/${studentId}`);
       setStudent(studentRes.data);
-      
-      // 设置todos数据，已经包含在学生数据中
       setTodos(studentRes.data.todos || []);
-      
       setError(null);
     } catch (err) {
       setError('获取学生信息失败');
       console.error(err);
     } finally {
+      isRequestInProgressRef.current = false;
       setLoading(false);
     }
   };
@@ -57,7 +69,7 @@ const StudentDetail = () => {
     const interval = setInterval(fetchStudentDetails, 30000); // 每30秒
     
     return () => clearInterval(interval);
-  }, [studentId, fetchStudentDetails]); // 添加 fetchStudentDetails 到依赖数组
+  }, [studentId]); // 添加 fetchStudentDetails 到依赖数组
 
   // 初始化更新状态
   useEffect(() => {
@@ -790,19 +802,6 @@ const StudentDetail = () => {
                         </button>
                       </div>
 
-                      {/* 添加自动评分状态面板 */}
-                      {autoGradingEnabled && (
-                        <div className="mt-4 mb-2">
-                          <div className="card">
-                            <div className="card-header bg-light">
-                              <h6 className="mb-0">自动评分模型状态</h6>
-                            </div>
-                            <div className="card-body">
-                              <ModelStatusPanel />
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -925,17 +924,47 @@ const StudentDetail = () => {
                                     设为参考解决方案
                                   </button>
                                 </div>
-                                
-                                {/* 自动评分结果 */}
-                                {autoGradingStatus && (
-                                  <div className="alert alert-info">
-                                    <h6>自动评分结果: {autoGradingStatus.score}/10</h6>
-                                    <div className="small">
-                                      <div><strong>置信度:</strong> {Math.round(autoGradingStatus.confidence * 100)}%</div>
-                                      <div><strong>解释:</strong> {autoGradingStatus.explanation}</div>
-                                    </div>
+                                {activeTab === 'tests' && (
+                                  <div className="mb-4">
+                                    <button 
+                                      className={`btn ${autoGradingEnabled ? 'btn-danger' : 'btn-success'}`}
+                                      onClick={async () => {
+                                        try {
+                                          const newStatus = !autoGradingEnabled;
+                                          await axios.put('/api/auto-grading/config', { enabled: newStatus });
+                                          setAutoGradingEnabled(newStatus);
+                                          alert(`自动评分系统已${newStatus ? '启用' : '禁用'}`);
+                                        } catch (err) {
+                                          alert('更新失败: ' + (err.response?.data?.error || '未知错误'));
+                                        }
+                                      }}
+                                    >
+                                      {autoGradingEnabled ? '禁用' : '启用'}自动评分系统
+                                    </button>
                                   </div>
                                 )}
+                                {/* 自动评分结果 */}
+                                {activeTab === 'tests' && (
+                                <div className="mt-4 mb-2">
+                                  <div className="card">
+                                    <div className="card-header bg-light">
+                                      <h6 className="mb-0">
+                                        自动评分模型状态
+                                        <span className={`ms-2 badge ${autoGradingEnabled ? 'bg-success' : 'bg-danger'}`}>
+                                          {autoGradingEnabled ? '已启用' : '已禁用'}
+                                        </span>
+                                      </h6>
+                                    </div>
+                                    <div className="card-body">
+                                      <ModelStatusPanel 
+                                        refreshTrigger={refreshTrigger} 
+                                        autoGradingEnabled={autoGradingEnabled}
+                                        onStatusChange={(enabled) => setAutoGradingEnabled(enabled)}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                               </div>
                             )}
                           </div>
