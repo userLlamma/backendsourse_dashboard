@@ -60,8 +60,10 @@ Desktop.ini
 *.swo
 
 # Backend specific
-/data/*
-!/data/.gitkeep
+backend/data/*
+!backend/data/.gitkeep
+data/*
+!data/.gitkeep
 
 # Logs
 npm-debug.log*
