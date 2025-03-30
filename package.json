@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node backend/server.js",
-    "dev": "nodemon backend/server.js",
+    "dev": "nodemon --ignore 'backend/data/*' backend/server.js",
     "build-frontend": "cd frontend && npm run build",
     "install-frontend": "cd frontend && npm install",
     "setup": "npm install && npm run install-frontend && npm run build-frontend",

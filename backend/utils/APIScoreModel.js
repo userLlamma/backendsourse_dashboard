@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { RandomForestRegression } = require('ml-random-forest');
-const Matrix = require('ml-matrix');
+const { Matrix } = require('ml-matrix');
 
 /**
  * API响应评分模型
@@ -35,6 +35,9 @@ class APIScoreModel {
     
     // 初始化模型
     this.model = this.loadModel();
+    if (!this.model && this.trainingData.length >= this.options.minSamples) {
+      console.log('模型加载失败，但有足够的训练数据，将在下次调用时训练新模型');
+    }
     
     // 配置默认特征提取器
     this.configureFeatureExtractors();
@@ -450,8 +453,10 @@ class APIScoreModel {
    * @param {Object} testCase - 测试用例信息
    * @returns {Object} 学习结果
    */
-  learn(studentResponse, referenceResponse, teacherScore, testCase = {}) {
-    // 增加参数类型验证
+  async learn(studentResponse, referenceResponse, teacherScore, testCase = {}) {
+    console.log('开始学习过程...');
+    
+    // 添加参数类型验证
     if (!studentResponse || typeof studentResponse !== 'object') {
       console.error('错误: studentResponse不是有效对象');
       return {
@@ -473,53 +478,77 @@ class APIScoreModel {
         autoScore: 0
       };
     }
-
-    // 提取特征
-    const features = this.extractFeatures(studentResponse, referenceResponse, testCase);
-    
-    // 创建训练样本
-    const sample = {
-      features,
-      teacherScore,
-      timestamp: new Date().toISOString(),
-      testCaseInfo: {
-        endpoint: testCase.endpoint || '',
-        method: testCase.method || '',
-        name: testCase.name || ''
-      }
-    };
-    
-    // 自动评分 (用于比较)
-    const autoScore = this.scoreResponse(studentResponse, referenceResponse, testCase).score;
-    
-    // 计算评分差异
-    const scoreDiff = Math.abs(teacherScore - autoScore);
-    
-    // 只有当评分差异足够大时才添加到训练集
-    // 这可以避免过多相似的样本
-    const diffThreshold = 0.5;  // 分差阈值
-    let added = false;
-    
-    if (scoreDiff >= diffThreshold || this.trainingData.length < this.options.minSamples) {
-      this.trainingData.push(sample);
-      added = true;
+  
+    try {
+      // 提取特征
+      console.log('提取特征...');
+      const features = this.extractFeatures(studentResponse, referenceResponse, testCase);
+      console.log('特征提取完成:', features);
       
-      // 保存训练数据
-      this.saveTrainingData();
+      // 创建训练样本
+      const sample = {
+        features,
+        teacherScore,
+        timestamp: new Date().toISOString(),
+        testCaseInfo: {
+          endpoint: testCase.endpoint || '',
+          method: testCase.method || '',
+          name: testCase.name || ''
+        }
+      };
       
-      // 如果有足够的样本，训练模型
-      if (this.trainingData.length >= this.options.minSamples) {
-        this.trainModel();
+      // 自动评分 (用于比较)
+      console.log('计算当前自动评分...');
+      const autoScore = this.scoreResponse(studentResponse, referenceResponse, testCase).score;
+      console.log('自动评分结果:', autoScore);
+      
+      // 计算评分差异
+      const scoreDiff = Math.abs(teacherScore - autoScore);
+      console.log('评分差异:', scoreDiff);
+      
+      // 只有当评分差异足够大时才添加到训练集
+      // 这可以避免过多相似的样本
+      const diffThreshold = 0.5;  // 分差阈值
+      let added = false;
+      
+      if (scoreDiff >= diffThreshold || this.trainingData.length < this.options.minSamples) {
+        console.log('添加新样本到训练集...');
+        this.trainingData.push(sample);
+        added = true;
+        
+        // 保存训练数据
+        console.log('保存训练数据...');
+        const saveResult = await this.saveTrainingData();
+        console.log('训练数据保存结果:', saveResult);
+        
+        // 如果有足够的样本，训练模型
+        if (this.trainingData.length >= this.options.minSamples) {
+          console.log('尝试训练模型...');
+          const trainResult = this.trainModel();
+          console.log('模型训练结果:', trainResult);
+        }
+      } else {
+        console.log('评分差异过小，不添加新样本');
       }
+      
+      console.log('学习过程完成');
+      return {
+        added,
+        scoreDiff,
+        currentSamples: this.trainingData.length,
+        sufficientData: this.trainingData.length >= this.options.minSamples,
+        autoScore
+      };
+    } catch (err) {
+      console.error('学习过程失败:', err);
+      return {
+        added: false,
+        error: err.message,
+        currentSamples: this.trainingData.length,
+        sufficientData: this.trainingData.length >= this.options.minSamples,
+        autoScore: 0
+      };
     }
-    
-    return {
-      added,
-      scoreDiff,
-      currentSamples: this.trainingData.length,
-      sufficientData: this.trainingData.length >= this.options.minSamples,
-      autoScore
-    };
   }
 
   /**
@@ -535,50 +564,134 @@ class APIScoreModel {
     try {
       const startTime = Date.now();
       
-      // 准备训练数据
-      const X = new Matrix(this.trainingData.map(sample => sample.features));
-      const y = Matrix.columnVector(this.trainingData.map(sample => sample.teacherScore));
-      
-      // 创建并训练随机森林回归模型
-      const options = {
-        nEstimators: 10,  // 树的数量
-        maxDepth: 4,      // 最大深度
-        treeOptions: {
-          minNumSamples: 2  // 节点分裂所需的最小样本数
-        }
-      };
-      
-      this.model = new RandomForestRegression(options);
-      this.model.train(X, y);
-      
-      // 计算训练时间
-      const trainingTime = Date.now() - startTime;
-      
-      // 评估模型
-      const predictions = this.model.predict(X);
-      const errors = Array.from(predictions).map((pred, i) => Math.abs(pred - this.trainingData[i].teacherScore));
-      const avgError = errors.reduce((a, b) => a + b, 0) / errors.length;
-      
-      // 更新指标
-      this.metrics.lastTrainingTime = new Date().toISOString();
-      this.metrics.trainingSamples = this.trainingData.length;
-      this.metrics.averageError = avgError;
-      this.metrics.confidenceScore = Math.max(0.3, 1 - avgError / 10);
-      this.metrics.trainingTimeMs = trainingTime;
-      
-      // 更新分数分布
-      const scoreCountMap = {};
-      this.trainingData.forEach(sample => {
-        const scoreInt = Math.floor(sample.teacherScore);
-        scoreCountMap[scoreInt] = (scoreCountMap[scoreInt] || 0) + 1;
+      // 验证训练数据
+      console.log('验证训练样本...');
+      const validSamples = this.trainingData.filter(sample => {
+        // 确保特征是数组且长度一致
+        return Array.isArray(sample.features) && 
+               sample.features.length > 0 &&
+               sample.features.every(f => typeof f === 'number' && !isNaN(f)) &&
+               typeof sample.teacherScore === 'number' && 
+               !isNaN(sample.teacherScore);
       });
-      this.metrics.scoreDistribution = scoreCountMap;
       
-      // 保存模型
-      this.saveModel();
+      console.log(`有效训练样本: ${validSamples.length}/${this.trainingData.length}`);
       
-      console.log(`模型训练完成 (${trainingTime}ms)，平均误差: ${avgError.toFixed(2)}`);
-      return true;
+      if (validSamples.length < this.options.minSamples) {
+        console.error(`有效样本不足: ${validSamples.length}/${this.trainingData.length}`);
+        return false;
+      }
+      
+      // 检查所有特征向量的长度是否一致
+      const featureLength = validSamples[0].features.length;
+      const allSameLengthFeatures = validSamples.every(
+        sample => sample.features.length === featureLength
+      );
+      
+      if (!allSameLengthFeatures) {
+        console.error('特征向量长度不一致，无法训练模型');
+        return false;
+      }
+      
+      console.log(`特征向量长度: ${featureLength}`);
+      
+      // 准备训练数据
+      try {
+        // 正确导入Matrix
+        const { Matrix } = require('ml-matrix');
+        
+        console.log('创建特征矩阵...');
+        // 确保每个特征向量有相同的长度
+        const X = new Matrix(validSamples.map(sample => {
+          // 确保特征向量不为空且长度正确
+          if (!Array.isArray(sample.features) || sample.features.length !== featureLength) {
+            throw new Error(`特征向量长度不匹配: 预期${featureLength}，实际${sample.features?.length || 0}`);
+          }
+          return sample.features;
+        }));
+        
+        console.log('创建标签向量...');
+        const yValues = validSamples.map(sample => sample.teacherScore);
+        console.log('标签值:', yValues);
+        
+        // 处理输入，确保他们是有效的数值
+        const validYValues = yValues.map(v => {
+          const num = Number(v);
+          if (isNaN(num)) {
+            throw new Error(`教师评分非数值: ${v}`);
+          }
+          return num;
+        });
+        
+        const y = Matrix.columnVector(validYValues);
+        
+        console.log('创建随机森林回归模型...');
+        // 正确导入RandomForestRegression
+        const { RandomForestRegression } = require('ml-random-forest');
+        
+        const options = {
+          nEstimators: 5,  // 减少树的数量，避免过拟合
+          maxDepth: 3,     // 减少最大深度，简化模型
+          treeOptions: {
+            minNumSamples: 2  // 节点分裂所需的最小样本数
+          }
+        };
+        
+        this.model = new RandomForestRegression(options);
+        console.log('开始训练模型...');
+        
+        // 确保矩阵维度正确
+        console.log('特征矩阵维度:', X.rows, 'x', X.columns);
+        console.log('标签向量维度:', y.rows, 'x', y.columns);
+        
+        this.model.train(X, y);
+        console.log('模型训练完成');
+        
+        // 计算训练时间
+        const trainingTime = Date.now() - startTime;
+        
+        // 更新指标
+        this.metrics.lastTrainingTime = new Date().toISOString();
+        this.metrics.trainingSamples = validSamples.length;
+        this.metrics.trainingTimeMs = trainingTime;
+        
+        // 评估模型
+        try {
+          console.log('评估模型性能...');
+          const predictions = this.model.predict(X);
+          console.log('预测结果:', predictions);
+          
+          const errors = [];
+          for (let i = 0; i < predictions.length; i++) {
+            const error = Math.abs(predictions[i] - validYValues[i]);
+            if (!isNaN(error)) {
+              errors.push(error);
+            }
+          }
+          
+          const avgError = errors.length > 0 ? 
+            errors.reduce((a, b) => a + b, 0) / errors.length : 0;
+          
+          this.metrics.averageError = avgError;
+          this.metrics.confidenceScore = Math.max(0.3, 1 - avgError / 10);
+          
+          console.log(`平均误差: ${avgError.toFixed(2)}`);
+        } catch (evalErr) {
+          console.error('模型评估失败:', evalErr);
+          this.metrics.averageError = 0;
+          this.metrics.confidenceScore = 0.3;
+        }
+        
+        // 保存模型
+        console.log('保存模型...');
+        this.saveModel();
+        
+        console.log(`模型训练完成 (${trainingTime}ms)，平均误差: ${this.metrics.averageError.toFixed(2)}`);
+        return true;
+      } catch (matrixErr) {
+        console.error('矩阵操作或模型创建失败:', matrixErr);
+        return false;
+      }
     } catch (err) {
       console.error('模型训练失败:', err);
       return false;
@@ -591,14 +704,25 @@ class APIScoreModel {
    */
   async saveTrainingData() {
     try {
+      // 确保目录存在
+      if (!fs.existsSync(this.options.dataDir)) {
+        fs.mkdirSync(this.options.dataDir, { recursive: true });
+      }
+      
+      // 准备数据
+      const dataToSave = {
+        samples: this.trainingData,
+        metrics: this.metrics,
+        updated: new Date().toISOString()
+      };
+      
+      // 写入文件
       await fs.promises.writeFile(
         this.trainingDataPath,
-        JSON.stringify({
-          samples: this.trainingData,
-          metrics: this.metrics,
-          updated: new Date().toISOString()
-        }, null, 2)
+        JSON.stringify(dataToSave, null, 2)
       );
+      
+      console.log(`训练数据已保存 (${this.trainingData.length}个样本)`);
       return true;
     } catch (err) {
       console.error('保存训练数据失败:', err);
@@ -613,16 +737,48 @@ class APIScoreModel {
   loadTrainingData() {
     try {
       if (fs.existsSync(this.trainingDataPath)) {
-        const data = JSON.parse(fs.readFileSync(this.trainingDataPath, 'utf8'));
-        if (data.metrics) {
-          this.metrics = { ...this.metrics, ...data.metrics };
+        try {
+          const data = JSON.parse(fs.readFileSync(this.trainingDataPath, 'utf8'));
+          if (data && data.samples) {
+            console.log(`已加载${data.samples.length}个训练样本`);
+            
+            if (data.metrics) {
+              this.metrics = { ...this.metrics, ...data.metrics };
+            }
+            
+            return data.samples || [];
+          } else {
+            console.warn('训练数据文件格式不正确，将创建新的训练数据');
+            return [];
+          }
+        } catch (parseErr) {
+          console.error('训练数据文件损坏:', parseErr);
+          
+          // 备份损坏的文件
+          const backupPath = `${this.trainingDataPath}.backup.${Date.now()}`;
+          try {
+            fs.copyFileSync(this.trainingDataPath, backupPath);
+            console.log(`已将损坏的训练数据文件备份到: ${backupPath}`);
+          } catch (backupErr) {
+            console.error('备份训练数据文件失败:', backupErr);
+          }
+          
+          // 删除或重命名损坏的文件
+          try {
+            fs.unlinkSync(this.trainingDataPath);
+            console.log(`已删除损坏的训练数据文件: ${this.trainingDataPath}`);
+          } catch (unlinkErr) {
+            console.error('删除损坏的训练数据文件失败:', unlinkErr);
+          }
+          
+          // 返回空数组，开始新的训练
+          return [];
         }
-        console.log(`已加载${data.samples.length}个训练样本`);
-        return data.samples || [];
       }
     } catch (err) {
       console.error('加载训练数据失败:', err);
     }
+    
     return [];
   }
 
@@ -634,9 +790,10 @@ class APIScoreModel {
     if (!this.model) return false;
     
     try {
-      // 序列化模型
-      const modelJson = JSON.stringify(this.model.toJSON());
-      fs.writeFileSync(this.modelPath, modelJson);
+      // 使用模型实例的toJSON方法
+      const modelJson = this.model.toJSON();
+      fs.writeFileSync(this.modelPath, JSON.stringify(modelJson, null, 2), 'utf8');
+      console.log(`模型已保存到: ${this.modelPath}`);
       return true;
     } catch (err) {
       console.error('保存模型失败:', err);
@@ -651,11 +808,26 @@ class APIScoreModel {
   loadModel() {
     try {
       if (fs.existsSync(this.modelPath)) {
-        const modelJson = JSON.parse(fs.readFileSync(this.modelPath, 'utf8'));
-        const model = new RandomForestRegression();
-        model.fromJSON(modelJson);
-        console.log('模型已加载');
-        return model;
+        console.log(`尝试从 ${this.modelPath} 加载模型...`);
+        
+        try {
+          const modelJsonString = fs.readFileSync(this.modelPath, 'utf8');
+          const modelJson = JSON.parse(modelJsonString);
+          
+          const { RandomForestRegression } = require('ml-random-forest');
+          const model = RandomForestRegression.load(modelJson);
+          
+          console.log('模型已成功加载');
+          return model;
+        } catch (loadErr) {
+          console.error('模型文件损坏或格式不兼容，将删除并重新训练:', loadErr);
+          
+          // 删除损坏的模型文件
+          fs.unlinkSync(this.modelPath);
+          
+          // 返回null，系统会自动重新训练
+          return null;
+        }
       }
     } catch (err) {
       console.error('加载模型失败:', err);
