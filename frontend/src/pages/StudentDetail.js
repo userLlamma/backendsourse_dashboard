@@ -4,6 +4,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ModelStatusPanel from '../components/ModelStatusPanel';
 
+import { useContext } from 'react';
+import { AuthContext } from '../contexts/AuthContext';   // RBAC
+
+
 const StudentDetail = () => {
   const { studentId } = useParams();
   const navigate = useNavigate();
@@ -23,6 +27,8 @@ const StudentDetail = () => {
   const [autoGradingInProgress, setAutoGradingInProgress] = useState(false);
   const [autoGradingStatus, setAutoGradingStatus] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const { currentUser } = useContext(AuthContext);
 
   // 添加防重复请求控制
   const [lastRequestTime, setLastRequestTime] = useState(0);
@@ -203,12 +209,16 @@ const StudentDetail = () => {
     
     try {
       setAutoGradingInProgress(true);
+      console.log('开始学习过程...');
       
       // 首先获取参考解决方案
+      console.log('获取自动评分状态...');
       const res = await axios.get('/api/auto-grading/status');
+      console.log('获取参考解决方案结果:', res.data);
       const referenceSolutions = res.data.referenceSolutions || [];
       
       // 查找当前测试的参考解决方案
+      console.log(`为测试 ${selectedTest.name} 查找参考解决方案...`);
       const referenceSolution = referenceSolutions.find(
         sol => sol.testName === selectedTest.name && 
               sol.endpoint === selectedTest.endpoint
@@ -220,8 +230,12 @@ const StudentDetail = () => {
         return;
       }
       
+      console.log('找到参考解决方案:', referenceSolution);
+      
       // 获取参考学生的测试响应
+      console.log(`获取参考学生 ${referenceSolution.studentId} 数据...`);
       const refStudentRes = await axios.get(`/api/students/${referenceSolution.studentId}`);
+      console.log('获取参考学生数据结果:', refStudentRes.data);
       const refStudent = refStudentRes.data;
       
       if (!refStudent || !refStudent.lastTestResults || !refStudent.lastTestResults.tests) {
@@ -231,6 +245,7 @@ const StudentDetail = () => {
       }
       
       // 查找参考测试
+      console.log('查找参考测试数据...');
       const refTest = refStudent.lastTestResults.tests.find(
         test => test.name === selectedTest.name && test.endpoint === selectedTest.endpoint
       );
@@ -241,6 +256,8 @@ const StudentDetail = () => {
         return;
       }
       
+      console.log('找到参考测试数据');
+      
       // 构建测试用例信息
       const testCase = {
         name: selectedTest.name,
@@ -249,12 +266,24 @@ const StudentDetail = () => {
       };
       
       // 调用学习API
+      console.log('调用学习API...');
+      console.log('学习数据:', {
+        studentResponse: '(object)',
+        referenceResponse: '(object)',
+        teacherScore: selectedTestScore,
+        testCase
+      });
+      
       const learnRes = await axios.post('/api/auto-grading/learn', {
         studentResponse: selectedTest.response,
         referenceResponse: refTest.response,
         teacherScore: selectedTestScore,
         testCase
+      },{
+        timeout: 10000 // 10秒超时
       });
+      
+      console.log('学习API响应:', learnRes.data);
       
       // 显示成功消息
       alert(
@@ -265,8 +294,22 @@ const StudentDetail = () => {
       );
     } catch (err) {
       console.error('学习失败:', err);
+      // 检查错误类型
+      if (err.response) {
+        // 服务器响应错误
+        console.error('响应状态:', err.response.status);
+        console.error('响应数据:', err.response.data);
+      } else if (err.request) {
+        // 请求已发送但没有收到响应
+        console.error('请求已发送但没有收到响应');
+      } else {
+        // 请求设置有问题
+        console.error('请求设置问题:', err.message);
+      }
+      
       alert(`学习失败: ${err.response?.data?.error || err.message}`);
     } finally {
+      console.log('学习过程结束');
       setAutoGradingInProgress(false);
     }
   };
@@ -888,7 +931,7 @@ const StudentDetail = () => {
                           </div>
                           
                           <div className="col-md-6">
-                            {autoGradingEnabled && (
+                            {(!student || !currentUser?.isStudent) && (
                               <div>
                                 <h6>自动评分</h6>
                                 <div className="mb-3">
@@ -946,23 +989,11 @@ const StudentDetail = () => {
                                 {/* 自动评分结果 */}
                                 {activeTab === 'tests' && (
                                 <div className="mt-4 mb-2">
-                                  <div className="card">
-                                    <div className="card-header bg-light">
-                                      <h6 className="mb-0">
-                                        自动评分模型状态
-                                        <span className={`ms-2 badge ${autoGradingEnabled ? 'bg-success' : 'bg-danger'}`}>
-                                          {autoGradingEnabled ? '已启用' : '已禁用'}
-                                        </span>
-                                      </h6>
-                                    </div>
-                                    <div className="card-body">
                                       <ModelStatusPanel 
                                         refreshTrigger={refreshTrigger} 
                                         autoGradingEnabled={autoGradingEnabled}
                                         onStatusChange={(enabled) => setAutoGradingEnabled(enabled)}
                                       />
-                                    </div>
-                                  </div>
                                 </div>
                               )}
                               </div>

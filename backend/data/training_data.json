@@ -1,0 +1,175 @@
+{
+  "samples": [
+    {
+      "features": [
+        1,
+        1,
+        0.5,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T09:38:41.010Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "GET /todos 获取所有待办事项"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.5,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T09:47:20.478Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "GET /todos 获取所有待办事项"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.3333333333333333,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T10:00:15.479Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "POST /suggest 获取任务建议"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.5,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T10:16:40.638Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "GET /todos 获取所有待办事项"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.5,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T10:18:14.624Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "GET /todos 获取所有待办事项"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.3333333333333333,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T10:57:19.553Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "POST /suggest 获取任务建议"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.3333333333333333,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T10:58:06.823Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "POST /suggest 获取任务建议"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.3333333333333333,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T10:59:19.374Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "POST /suggest 获取任务建议"
+      }
+    },
+    {
+      "features": [
+        1,
+        1,
+        0.3333333333333333,
+        1,
+        0,
+        1,
+        1
+      ],
+      "teacherScore": 10,
+      "timestamp": "2025-03-30T10:59:53.792Z",
+      "testCaseInfo": {
+        "endpoint": "未知端点",
+        "method": "GET",
+        "name": "POST /suggest 获取任务建议"
+      }
+    }
+  ],
+  "metrics": {
+    "sampleCount": 8,
+    "lastTrainingTime": null,
+    "trainingSamples": 0,
+    "averageError": 0,
+    "confidenceScore": 0,
+    "scoreDistribution": {}
+  },
+  "updated": "2025-03-30T10:59:53.793Z"
+}

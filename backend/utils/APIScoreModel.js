@@ -235,6 +235,20 @@ class APIScoreModel {
    * @returns {Array} 特征向量
    */
   extractFeatures(studentResponse, referenceResponse, testCase = {}) {
+    // 转换字符串为对象
+    try {
+      if (typeof studentResponse === 'string') {
+        studentResponse = JSON.parse(studentResponse);
+      }
+      
+      if (typeof referenceResponse === 'string') {
+        referenceResponse = JSON.parse(referenceResponse);
+      }
+    } catch (err) {
+      console.error('无法解析响应字符串:', err);
+      // 默认返回一个特征全为0的向量
+      return new Array(Object.keys(this.featureExtractors).length).fill(0);
+    }
     const features = [];
     
     // 应用每个特征提取器并收集结果
@@ -437,6 +451,29 @@ class APIScoreModel {
    * @returns {Object} 学习结果
    */
   learn(studentResponse, referenceResponse, teacherScore, testCase = {}) {
+    // 增加参数类型验证
+    if (!studentResponse || typeof studentResponse !== 'object') {
+      console.error('错误: studentResponse不是有效对象');
+      return {
+        added: false,
+        error: '学生响应格式错误',
+        currentSamples: this.trainingData.length,
+        sufficientData: this.trainingData.length >= this.options.minSamples,
+        autoScore: 0
+      };
+    }
+    
+    if (!referenceResponse || typeof referenceResponse !== 'object') {
+      console.error('错误: referenceResponse不是有效对象');
+      return {
+        added: false,
+        error: '参考响应格式错误',
+        currentSamples: this.trainingData.length,
+        sufficientData: this.trainingData.length >= this.options.minSamples,
+        autoScore: 0
+      };
+    }
+
     // 提取特征
     const features = this.extractFeatures(studentResponse, referenceResponse, testCase);
     
@@ -552,9 +589,9 @@ class APIScoreModel {
    * 保存训练数据到文件
    * @returns {boolean} 保存是否成功
    */
-  saveTrainingData() {
+  async saveTrainingData() {
     try {
-      fs.writeFileSync(
+      await fs.promises.writeFile(
         this.trainingDataPath,
         JSON.stringify({
           samples: this.trainingData,
@@ -710,15 +747,32 @@ class APIScoreModel {
    * @param {Object} obj - 要扁平化的对象
    * @returns {Object} 扁平化后的对象
    */
-  flattenObject(obj, prefix = '') {
+  flattenObject(obj, prefix = '', seen = new WeakSet()) {
     const result = {};
+    
+    // 防止循环引用
+    if (obj === null || typeof obj !== 'object' || seen.has(obj)) {
+      return result;
+    }
+    
+    seen.add(obj);
+    
+    // 设置最大递归深度
+    const maxDepth = 10;
+    const checkDepth = (str) => (str.match(/\./g) || []).length;
     
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
         const newKey = prefix ? `${prefix}.${key}` : key;
         
+        // 检查递归深度
+        if (prefix && checkDepth(newKey) > maxDepth) {
+          console.warn(`达到最大递归深度，跳过${newKey}`);
+          continue;
+        }
+        
         if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-          Object.assign(result, this.flattenObject(obj[key], newKey));
+          Object.assign(result, this.flattenObject(obj[key], newKey, seen));
         } else {
           result[newKey] = obj[key];
         }
