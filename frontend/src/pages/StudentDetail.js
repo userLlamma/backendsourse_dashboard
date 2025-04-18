@@ -30,6 +30,15 @@ const StudentDetail = () => {
 
   const { currentUser } = useContext(AuthContext);
 
+  // 修改密码的状态
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [changePasswordError, setChangePasswordError] = useState('');
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   // 添加防重复请求控制
   const [lastRequestTime, setLastRequestTime] = useState(0);
   const isRequestInProgressRef = useRef(false);
@@ -351,17 +360,25 @@ const StudentDetail = () => {
       const totalScore = updatedTests.reduce((sum, test) => sum + (test.score?.value || 0), 0);
       const maxPossibleScore = updatedTests.reduce((sum, test) => sum + (test.score?.maxValue || 10), 0);
       
-      await axios.post(`/api/students/${studentId}/update-test-scores`, {
+      const response = await axios.post(`/api/students/${studentId}/update-test-scores`, {
         tests: updatedTests,
         totalScore,
         maxPossibleScore
       });
       
-      fetchStudentDetails(); // 刷新数据
-      alert('评分已保存');
+      // 确认更新成功后，直接获取最新数据而不是尝试本地更新
+      fetchStudentDetails(true); // 传递true参数强制刷新
+      
+      // 显示成功消息，包括更新后的测试统计
+      const passRate = response.data.testStats ? response.data.testStats.passRate.toFixed(1) + '%' : '计算中';
+      
+      alert(`评分已保存成功！\n总分: ${response.data.score}/${response.data.maxPossibleScore}\n通过率: ${passRate}`);
+      
+      setError(null);
     } catch (err) {
       setError('保存评分失败');
       console.error(err);
+      alert('保存评分失败: ' + (err.response?.data?.error || '未知错误'));
     } finally {
       setLoading(false);
     }
@@ -431,6 +448,53 @@ const StudentDetail = () => {
     );
   }
   
+  // 处理密码修改表单提交
+  const handleChangePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setChangePasswordError('');
+    setChangePasswordSuccess('');
+  
+    // Client-side validation
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      setChangePasswordError('请填写所有字段');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setChangePasswordError('两次输入的新密码不一致');
+      return;
+    }
+  
+    try {
+      setIsChangingPassword(true);
+      const token = localStorage.getItem('authToken'); // Get token from storage
+      const response = await axios.post('/api/student-auth/change-password', {
+        currentPassword,
+        newPassword,
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+  
+      if (response.status === 200) {
+        setChangePasswordSuccess('密码修改成功');
+        // Reset form fields
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        // Close the modal
+        setShowChangePasswordModal(false);
+      } else {
+        setChangePasswordError(response.data.error || '修改密码失败');
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      setChangePasswordError(error.response?.data?.error || '修改密码失败');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
   return (
     <div className="container-fluid py-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -511,6 +575,15 @@ const StudentDetail = () => {
                 >
                   执行测试
                 </button>
+                {/* Change Password button here */}
+                {currentUser && currentUser.isStudent && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowChangePasswordModal(true)}
+                  >
+                    修改密码
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1013,6 +1086,78 @@ const StudentDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      {showChangePasswordModal && (
+        <div className="modal fade show" style={{ display: 'block' }} tabIndex="-1">
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">修改密码</h5>
+                <button type="button" className="btn-close" onClick={() => setShowChangePasswordModal(false)}></button>
+              </div>
+              <div className="modal-body">
+                {changePasswordError && (
+                  <div className="alert alert-danger" role="alert">
+                    {changePasswordError}
+                  </div>
+                )}
+                {changePasswordSuccess && (
+                  <div className="alert alert-success" role="alert">
+                    {changePasswordSuccess}
+                  </div>
+                )}
+                <form onSubmit={handleChangePasswordSubmit}>
+                  <div className="mb-3">
+                    <label htmlFor="currentPassword" className="form-label">当前密码</label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      id="currentPassword"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="newPassword" className="form-label">新密码</label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      id="newPassword"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="confirmNewPassword" className="form-label">确认新密码</label>
+                    <input
+                      type="password"
+                      className="form-control"
+                      id="confirmNewPassword"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="d-flex justify-content-end">
+                    <button type="button" className="btn btn-secondary me-2" onClick={() => setShowChangePasswordModal(false)}>取消</button>
+                    <button type="submit" className="btn btn-primary" disabled={isChangingPassword}>
+                      {isChangingPassword ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                          &nbsp;修改中...
+                        </>
+                      ) : '修改密码'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -283,19 +283,37 @@ router.post('/:studentId/update-test-scores', authenticate, async (req, res) => 
       return res.status(404).json({ error: '学生未找到' });
     }
     
-    // 确保测试数据格式完整
+    // 计算通过和失败的测试数量
+    let totalPassed = 0;
+    let totalFailed = 0;
+    
+    // 确保测试数据格式完整并更新通过/失败计数
     const processedTests = tests.map(test => {
-      // 保留原始测试数据中的所有字段
+      // 确定测试是否通过 (根据分数)
+      // 如果评分达到60%或以上，视为通过
+      const scoreValue = test.score?.value || 0;
+      const maxValue = test.score?.maxValue || 10;
+      const passThreshold = maxValue * 0.6;
+      const passed = scoreValue >= passThreshold;
+      
+      // 更新计数
+      if (passed) {
+        totalPassed++;
+      } else {
+        totalFailed++;
+      }
+      
+      // 保留原始测试数据中的所有字段，但更新passed状态
       return {
         name: test.name || '未命名测试',
         endpoint: test.endpoint || '未知端点',
         method: test.method || 'GET',
-        passed: test.passed || false,
+        passed: passed, // 更新测试通过状态
         response: test.response || null,
         error: test.error || null,
         score: {
-          value: test.score?.value || 0,
-          maxValue: test.score?.maxValue || 10,
+          value: scoreValue,
+          maxValue: maxValue,
           comments: test.score?.comments || '',
           gradedBy: req.user.id,
           gradedAt: new Date()
@@ -307,8 +325,6 @@ router.post('/:studentId/update-test-scores', authenticate, async (req, res) => 
     if (!student.lastTestResults) {
       student.lastTestResults = {
         tests: [],
-        totalPassed: 0,
-        totalFailed: 0,
         timestamp: new Date()
       };
     }
@@ -316,6 +332,8 @@ router.post('/:studentId/update-test-scores', authenticate, async (req, res) => 
     student.lastTestResults.tests = processedTests;
     student.lastTestResults.score = totalScore;
     student.lastTestResults.maxPossibleScore = maxPossibleScore;
+    student.lastTestResults.totalPassed = totalPassed;
+    student.lastTestResults.totalFailed = totalFailed;
     
     await student.save();
         
@@ -323,7 +341,12 @@ router.post('/:studentId/update-test-scores', authenticate, async (req, res) => 
       success: true, 
       message: '测试评分已更新',
       score: totalScore,
-      maxPossibleScore
+      maxPossibleScore,
+      testStats: {
+        totalPassed,
+        totalFailed,
+        passRate: totalPassed / (totalPassed + totalFailed) * 100
+      }
     });
   } catch (error) {
     console.error('更新测试评分失败:', error);

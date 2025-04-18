@@ -630,10 +630,10 @@ class APIScoreModel {
         const { RandomForestRegression } = require('ml-random-forest');
         
         const options = {
-          nEstimators: 5,  // 减少树的数量，避免过拟合
-          maxDepth: 3,     // 减少最大深度，简化模型
+          nEstimators: 3,  // 减少树的数量，避免过拟合
+          maxDepth: 2,     // 减少最大深度，简化模型
           treeOptions: {
-            minNumSamples: 2  // 节点分裂所需的最小样本数
+            minNumSamples: 1  // 节点分裂所需的最小样本数
           }
         };
         
