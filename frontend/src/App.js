@@ -15,6 +15,7 @@ import StudentLogin from './pages/StudentLogin';
 import StudentManagement from './pages/StudentManagement';
 import NavBar from './components/NavBar';
 import GradeExport from './pages/GradeExport';  // 成绩导出
+import QrLoginFromLocalStorage from './pages/QrLoginFromLocalStorage';  // 二维码登录
 
 import './App.css';
 
@@ -27,6 +28,7 @@ function App() {
             {/* 公共路由 */}
             <Route path="/login" element={<Login />} />
             <Route path="/student-login" element={<StudentLogin />} />
+            <Route path="/qr-login-from-localstorage" element={<QrLoginFromLocalStorage />} />
             
             {/* 教师路由 */}
             <Route
